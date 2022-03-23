@@ -47,7 +47,7 @@ export default class RPC {
 			if (onlineLabel) {
 				onlineLabel.classList.add('bg-success');
 				onlineLabel.classList.remove('bg-danger');
-				onlineLabel.innerText = 'Online';
+				onlineLabel.innerText = "На зв'язку";
 			}
 			for (const method in this.handlers) {
 				this.notify('subscribe', method)

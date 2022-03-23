@@ -14,5 +14,5 @@ func (a *Application) Example(msg ExampleRequest) (*ExampleResponse, error) {
 	a.responseCounter++
 
 	return &ExampleResponse{
-		Message: "Response " + strconv.Itoa(a.responseCounter) + ": " + msg.Message}, nil
+		Message: "Відповідь " + strconv.Itoa(a.responseCounter) + ": " + msg.Message}, nil
 }

@@ -83,6 +83,9 @@ func (c *Boot) WSClient() *client.Client {
 	s := client.New().
 		NS("example",
 			client.NSMethod("method", c.Application().Example),
+		).
+		NS("code",
+			client.NSMethod("generate_image", c.Application().QR),
 		)
 
 	c.Application().SetStreamer(s)
