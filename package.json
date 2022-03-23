@@ -1,0 +1,37 @@
+{
+  "name": "go_tools",
+  "version": "1.0.0",
+  "description": "Go Tools",
+  "main": "index.js",
+  "repository": "https://github.com/michcald/go-tools",
+  "author": "Michael Caldera",
+  "contributors": ["Dmytro Vovk"],
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint ./frontend --ext .ts",
+    "lint-fix": "eslint --fix ./frontend --ext .ts",
+    "build": "esbuild frontend/index.ts --bundle --minify --sourcemap --outfile=internal/webserver/handlers/home/index.js"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "5.3.0",
+    "@typescript-eslint/parser": "5.3.0",
+    "esbuild": "0.13.12",
+    "eslint": "^7.1.0",
+    "eslint-plugin-cypress": "^2.11.3",
+    "eslint-plugin-react": "^7.27.1",
+    "reconnecting-websocket": "4.4.0",
+    "typescript": "4.4.4"
+  },
+  "dependencies": {
+    "@types/jquery": "3.5.5",
+    "admin-lte": "^3.1.0",
+    "dayjs": "1.10.5",
+    "jquery": "3.6.0",
+    "lodash": "^4.17.21",
+    "mocha": "^9.1.3",
+    "navigo": "8.11.1",
+    "simple-jsonrpc-js": "1.2.0",
+    "toastr": "^2.1.4",
+    "moment": "^2.29.1"
+  }
+}
