@@ -20,10 +20,11 @@ type Config struct {
 }
 
 func Load(fileName string) *Config {
-	f, err := os.OpenFile(fileName, os.O_RDONLY, 0600)
+	f, err := os.Open(fileName)
 	if err != nil {
 		log.Fatalf("Error opening config file %s: %s", fileName, err)
 	}
+
 	defer func(c io.Closer) {
 		if err := c.Close(); err != nil {
 			log.Printf("Error closing config file: %s", err)

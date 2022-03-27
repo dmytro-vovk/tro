@@ -3,7 +3,7 @@
     "listen": ":80"
   },
   "api": {
-    "listen": ":88"
+    "listen": ":8080"
   },
   "database": {
     "dsn": "tro-user:qwvkUB9f7AVtPLnf@/tro"

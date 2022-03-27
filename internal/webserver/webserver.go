@@ -5,9 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-
-	"github.com/dmytro-vovk/tro/internal/webserver/handlers/home"
-	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
 )
 
 type Auth interface {
@@ -19,27 +16,18 @@ type Webserver struct {
 	server *http.Server
 }
 
-func New(handler *ws.Handler, listen string) *Webserver {
+func New(handler http.Handler, listen string) *Webserver {
 	return &Webserver{
 		listen: listen,
 		server: &http.Server{
-			Addr: listen,
-			Handler: NewRouter(
-				Route("/ws", handler.Handler),
-				Route("/js/index.js", home.Scripts),
-				Route("/js/index.js.map", home.ScriptsMap),
-				Route("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(http.StatusNoContent)
-				}),
-				RoutePrefix("/css/", home.Styles.ServeHTTP),
-				CatchAll(home.Handler),
-			),
+			Addr:    listen,
+			Handler: handler,
 		},
 	}
 }
 
-func (w *Webserver) Serve() (err error) {
-	log.Printf("Webserver starting at %s", w.listen)
+func (w *Webserver) Serve(name string) (err error) {
+	log.Printf("%s starting at %s", name, w.listen)
 
 	err = w.server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {

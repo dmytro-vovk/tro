@@ -12,7 +12,13 @@ func main() {
 	c, shutdown := boot.New()
 	defer shutdown()
 
-	if err := c.Webserver().Serve(); err != nil {
+	go func() {
+		if err := c.APIServer().Serve("API server"); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	if err := c.Webserver().Serve("Web server"); err != nil {
 		log.Fatal(err)
 	}
 }

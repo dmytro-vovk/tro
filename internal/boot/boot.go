@@ -3,15 +3,19 @@ package boot
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/dmytro-vovk/tro/internal/api"
 	"github.com/dmytro-vovk/tro/internal/app"
 	"github.com/dmytro-vovk/tro/internal/boot/config"
 	"github.com/dmytro-vovk/tro/internal/storage"
 	"github.com/dmytro-vovk/tro/internal/webserver"
+	"github.com/dmytro-vovk/tro/internal/webserver/handlers/home"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
+	"github.com/dmytro-vovk/tro/internal/webserver/router"
 )
 
 type Boot struct {
@@ -58,6 +62,41 @@ func (c *Boot) Application() *app.Application {
 	return a
 }
 
+func (c *Boot) API() *api.API {
+	id := "API"
+	if s, ok := c.Get(id).(*api.API); ok {
+		return s
+	}
+
+	a := api.New(c.Storage())
+
+	c.Set(id, a, nil)
+
+	return a
+}
+
+func (c *Boot) WebHandler() http.HandlerFunc {
+	id := "Web Router"
+	if s, ok := c.Get(id).(http.HandlerFunc); ok {
+		return s
+	}
+
+	r := router.New(
+		router.Route("/ws", c.WebsocketHandler().Handler),
+		router.Route("/js/index.js", home.Scripts),
+		router.Route("/js/index.js.map", home.ScriptsMap),
+		router.Route("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		router.RoutePrefix("/css/", home.Styles.ServeHTTP),
+		router.CatchAll(home.Handler),
+	)
+
+	c.Set(id, r, nil)
+
+	return r
+}
+
 func (c *Boot) Webserver() *webserver.Webserver {
 	id := "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
@@ -65,7 +104,7 @@ func (c *Boot) Webserver() *webserver.Webserver {
 	}
 
 	s := webserver.New(
-		c.WebsocketHandler(),
+		c.WebHandler(),
 		c.Config().WebServer.Listen,
 	)
 
@@ -74,6 +113,45 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		defer cancel()
 		if err := s.Stop(ctx); err != nil {
 			log.Printf("Error stopping web server: %s", err)
+		}
+	})
+
+	return s
+}
+
+func (c *Boot) APIHandler() http.HandlerFunc {
+	id := "API Router"
+	if s, ok := c.Get(id).(http.HandlerFunc); ok {
+		return s
+	}
+
+	a := c.API()
+
+	r := router.New(
+		router.CatchAll(a.Handle404()),
+	)
+
+	c.Set(id, r, nil)
+
+	return r
+}
+
+func (c *Boot) APIServer() *webserver.Webserver {
+	id := "Web Server"
+	if s, ok := c.Get(id).(*webserver.Webserver); ok {
+		return s
+	}
+
+	s := webserver.New(
+		c.APIHandler(),
+		c.Config().API.Listen,
+	)
+
+	c.Set(id, s, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.Stop(ctx); err != nil {
+			log.Printf("Error stopping api server: %s", err)
 		}
 	})
 
