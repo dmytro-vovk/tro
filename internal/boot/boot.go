@@ -75,7 +75,7 @@ func (c *Boot) API() *api.API {
 	return a
 }
 
-func (c *Boot) WebHandler() http.HandlerFunc {
+func (c *Boot) WebRouter() http.HandlerFunc {
 	id := "Web Router"
 	if s, ok := c.Get(id).(http.HandlerFunc); ok {
 		return s
@@ -104,7 +104,7 @@ func (c *Boot) Webserver() *webserver.Webserver {
 	}
 
 	s := webserver.New(
-		c.WebHandler(),
+		c.WebRouter(),
 		c.Config().WebServer.Listen,
 	)
 
@@ -119,7 +119,7 @@ func (c *Boot) Webserver() *webserver.Webserver {
 	return s
 }
 
-func (c *Boot) APIHandler() http.HandlerFunc {
+func (c *Boot) APIRouter() http.HandlerFunc {
 	id := "API Router"
 	if s, ok := c.Get(id).(http.HandlerFunc); ok {
 		return s
@@ -143,7 +143,7 @@ func (c *Boot) APIServer() *webserver.Webserver {
 	}
 
 	s := webserver.New(
-		c.APIHandler(),
+		c.APIRouter(),
 		c.Config().API.Listen,
 	)
 
