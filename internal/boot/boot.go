@@ -69,15 +69,13 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		c.Config().WebServer.Listen,
 	)
 
-	fn := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	c.Set(id, s, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.Stop(ctx); err != nil {
 			log.Printf("Error stopping web server: %s", err)
 		}
-	}
-
-	c.Set(id, s, fn)
+	})
 
 	return s
 }
@@ -124,7 +122,11 @@ func (c *Boot) Storage() *storage.Storage {
 
 	s := storage.New(c.Config().Database.DSN)
 
-	c.Set(id, s, nil)
+	c.Set(id, s, func() {
+		if err := s.Close(); err != nil {
+			log.Printf("Error closing database: %s", err)
+		}
+	})
 
 	return s
 }
