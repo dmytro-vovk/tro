@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
 	"github.com/gorilla/websocket"
-	"github.com/michcald/go-tools/internal/webserver/handlers/ws/client"
 )
 
 type Handler struct {

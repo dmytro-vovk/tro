@@ -21,4 +21,5 @@ build-back:
 	@go build -ldflags "-s -w" -o app cmd/main.go
 
 run: build-front
-	@go run cmd/main.go
+	docker-compose up --detach --build
+	go run cmd/main.go; docker-compose down

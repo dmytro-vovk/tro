@@ -8,6 +8,9 @@ import (
 )
 
 type Config struct {
+	WebServer struct {
+		Listen string `json:"listen"`
+	} `json:"webserver"`
 	Database struct {
 		DSN string `json:"dsn"`
 	} `json:"database"`

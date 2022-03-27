@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/michcald/go-tools/internal/storage"
+	"github.com/dmytro-vovk/tro/internal/storage"
 )
 
 type Application struct {

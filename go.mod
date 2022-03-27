@@ -1,4 +1,4 @@
-module github.com/michcald/go-tools
+module github.com/dmytro-vovk/tro
 
 go 1.17
 

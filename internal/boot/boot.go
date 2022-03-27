@@ -6,12 +6,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/michcald/go-tools/internal/app"
-	"github.com/michcald/go-tools/internal/boot/config"
-	"github.com/michcald/go-tools/internal/storage"
-	"github.com/michcald/go-tools/internal/webserver"
-	"github.com/michcald/go-tools/internal/webserver/handlers/ws"
-	"github.com/michcald/go-tools/internal/webserver/handlers/ws/client"
+	"github.com/dmytro-vovk/tro/internal/app"
+	"github.com/dmytro-vovk/tro/internal/boot/config"
+	"github.com/dmytro-vovk/tro/internal/storage"
+	"github.com/dmytro-vovk/tro/internal/webserver"
+	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
+	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
 )
 
 type Boot struct {
@@ -66,7 +66,7 @@ func (c *Boot) Webserver() *webserver.Webserver {
 
 	s := webserver.New(
 		c.WebsocketHandler(),
-		":8080",
+		c.Config().WebServer.Listen,
 	)
 
 	fn := func() {

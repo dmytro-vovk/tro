@@ -6,8 +6,8 @@ import (
 	"log"
 	"sync"
 
+	"github.com/dmytro-vovk/tro/internal/jsonrpc"
 	"github.com/gorilla/websocket"
-	"github.com/michcald/go-tools/internal/jsonrpc"
 )
 
 type connection struct {

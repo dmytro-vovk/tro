@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "Go Tools",
   "main": "index.js",
-  "repository": "https://github.com/michcald/go-tools",
-  "author": "Michael Caldera",
-  "contributors": ["Dmytro Vovk"],
-  "license": "MIT",
+  "repository": "https://github.com/dmytro-vovk/tro",
+  "author": "Dmytro Vovk",
+  "license": "private",
   "scripts": {
     "lint": "eslint ./frontend --ext .ts",
     "lint-fix": "eslint --fix ./frontend --ext .ts",

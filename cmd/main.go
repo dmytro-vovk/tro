@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/michcald/go-tools/internal/boot"
+	"github.com/dmytro-vovk/tro/internal/boot"
 )
 
 func main() {

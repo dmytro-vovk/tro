@@ -1,5 +1,8 @@
 {
+  "webserver": {
+    "listen": ":80"
+  },
   "database": {
-    "dsn": "user:password@/db"
+    "dsn": "tro-user:qwvkUB9f7AVtPLnf@/tro"
   }
 }

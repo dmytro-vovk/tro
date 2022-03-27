@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/michcald/go-tools/internal/webserver/handlers/home"
-	"github.com/michcald/go-tools/internal/webserver/handlers/ws"
+	"github.com/dmytro-vovk/tro/internal/webserver/handlers/home"
+	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
 )
 
 type Auth interface {
