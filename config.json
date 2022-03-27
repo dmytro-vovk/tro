@@ -1,0 +1,5 @@
+{
+  "database": {
+    "dsn": "user:password@/db"
+  }
+}

@@ -3,9 +3,12 @@ package boot
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/michcald/go-tools/internal/app"
+	"github.com/michcald/go-tools/internal/boot/config"
+	"github.com/michcald/go-tools/internal/storage"
 	"github.com/michcald/go-tools/internal/webserver"
 	"github.com/michcald/go-tools/internal/webserver/handlers/ws"
 	"github.com/michcald/go-tools/internal/webserver/handlers/ws/client"
@@ -24,13 +27,31 @@ func New() (*Boot, func()) {
 	return &boot, fn
 }
 
+func (c *Boot) Config() *config.Config {
+	id := "Config"
+	if s, ok := c.Get(id).(*config.Config); ok {
+		return s
+	}
+
+	configFile := "config.json"
+	if cfg := os.Getenv("CONFIG"); cfg != "" {
+		configFile = cfg
+	}
+
+	s := config.Load(configFile)
+
+	c.Set(id, s, nil)
+
+	return s
+}
+
 func (c *Boot) Application() *app.Application {
 	id := "Application"
 	if s, ok := c.Get(id).(*app.Application); ok {
 		return s
 	}
 
-	a := app.New()
+	a := app.New(c.Storage())
 
 	c.Set(id, a, nil)
 
@@ -89,6 +110,19 @@ func (c *Boot) WSClient() *client.Client {
 		)
 
 	c.Application().SetStreamer(s)
+
+	c.Set(id, s, nil)
+
+	return s
+}
+
+func (c *Boot) Storage() *storage.Storage {
+	id := "Database"
+	if s, ok := c.Get(id).(*storage.Storage); ok {
+		return s
+	}
+
+	s := storage.New(c.Config().Database.DSN)
 
 	c.Set(id, s, nil)
 
