@@ -11,6 +11,9 @@ type Config struct {
 	WebServer struct {
 		Listen string `json:"listen"`
 	} `json:"webserver"`
+	API struct {
+		Listen string `json:"listen"`
+	} `json:"api"`
 	Database struct {
 		DSN string `json:"dsn"`
 	} `json:"database"`

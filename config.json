@@ -2,6 +2,9 @@
   "webserver": {
     "listen": ":80"
   },
+  "api": {
+    "listen": ":88"
+  },
   "database": {
     "dsn": "tro-user:qwvkUB9f7AVtPLnf@/tro"
   }
