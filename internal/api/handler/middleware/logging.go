@@ -1,9 +1,10 @@
 package middleware
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"net/http"
 )
 
 func ErrorHandler(logger *logrus.Logger) gin.HandlerFunc {

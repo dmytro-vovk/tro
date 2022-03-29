@@ -2,23 +2,31 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/dmytro-vovk/tro/internal/api"
 	"io"
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
 	WebServer struct {
 		Listen string `json:"listen"`
 	} `json:"webserver"`
-	API      api.Config `json:"api"`
+	API struct {
+		AuthMethod string `json:"auth_method"`
+		Listen     string `json:"listen"`
+	} `json:"api"`
 	Database struct {
 		DriverName string `json:"driver_name"`
 	} `json:"database"`
 }
 
 func Load(fileName string) *Config {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading environment variables: %s", err)
+	}
+
 	f, err := os.Open(fileName)
 	if err != nil {
 		log.Fatalf("Error opening config file %s: %s", fileName, err)

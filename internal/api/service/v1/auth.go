@@ -4,9 +4,10 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/dgrijalva/jwt-go"
 	"github.com/dmytro-vovk/tro/internal/api/model"
-	"time"
 )
 
 const (

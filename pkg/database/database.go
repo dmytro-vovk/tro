@@ -2,10 +2,11 @@ package database
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/dmytro-vovk/tro/pkg/database/mysql"
 	"github.com/dmytro-vovk/tro/pkg/database/postgres"
 	"github.com/jmoiron/sqlx"
-	"os"
 )
 
 func New(driver string) (*sqlx.DB, error) {

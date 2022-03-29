@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+
 	"github.com/dmytro-vovk/tro/internal/api/model"
 	"github.com/dmytro-vovk/tro/internal/api/repository/mysql"
 	"github.com/dmytro-vovk/tro/internal/api/repository/postgres"

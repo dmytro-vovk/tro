@@ -2,10 +2,11 @@ package service
 
 import (
 	"fmt"
+
 	"github.com/dmytro-vovk/tro/internal/api/model"
 	"github.com/dmytro-vovk/tro/internal/api/repository"
-	"github.com/dmytro-vovk/tro/internal/api/service/v1"
-	"github.com/dmytro-vovk/tro/internal/api/service/v2"
+	v1 "github.com/dmytro-vovk/tro/internal/api/service/v1"
+	v2 "github.com/dmytro-vovk/tro/internal/api/service/v2"
 )
 
 type Authorization interface {
@@ -18,17 +19,13 @@ type Service interface {
 	Authorization
 }
 
-type Config struct {
-	AuthMethod string
-}
-
-func New(db repository.Repository, config Config) (Service, error) {
-	switch config.AuthMethod {
+func New(db repository.Repository, authMethod string) (Service, error) {
+	switch authMethod {
 	case "jwt":
 		return v1.New(db), nil
 	case "avigilon":
 		return v2.New(db), nil
 	default:
-		return nil, fmt.Errorf("authorization method %q isn't exist", config.AuthMethod)
+		return nil, fmt.Errorf("authorization method %q doesn't exist", authMethod)
 	}
 }

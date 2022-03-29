@@ -1,9 +1,10 @@
 package auth
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 const userContext = "userID"

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"fmt"
+
 	"github.com/dmytro-vovk/tro/internal/api/model"
 	"github.com/jmoiron/sqlx"
 )

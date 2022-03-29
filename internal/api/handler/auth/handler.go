@@ -1,10 +1,11 @@
 package auth
 
 import (
+	"net/http"
+
 	"github.com/dmytro-vovk/tro/internal/api/model"
 	"github.com/dmytro-vovk/tro/internal/api/service"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 // todo: make private

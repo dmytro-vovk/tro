@@ -2,12 +2,15 @@ package boot
 
 import (
 	"context"
-	"github.com/dmytro-vovk/tro/pkg/database"
-	"github.com/jmoiron/sqlx"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/dmytro-vovk/tro/internal/api/repository"
+	"github.com/dmytro-vovk/tro/internal/api/service"
+	"github.com/dmytro-vovk/tro/pkg/database"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/dmytro-vovk/tro/internal/api"
 	"github.com/dmytro-vovk/tro/internal/app"
@@ -69,10 +72,8 @@ func (c *Boot) API() *api.Handler {
 		return s
 	}
 
-	handler, err := api.NewHandler(c.Storage(), c.Config().API)
-	if err != nil {
-		log.Panic(err) // todo: this error types should be thrown outside with shutdown in main
-	}
+	handler := api.NewHandler(c.APIService())
+
 	c.Set(id, handler, nil)
 
 	return handler
@@ -144,6 +145,7 @@ func (c *Boot) APIServer() *webserver.Webserver {
 		c.APIRouter(),
 		c.Config().API.Listen,
 	)
+
 	c.Set(id, s, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -197,7 +199,7 @@ func (c *Boot) Storage() *sqlx.DB {
 
 	db, err := database.New(c.Config().Database.DriverName)
 	if err != nil {
-		log.Panic(err) // todo: this error types should be thrown outside with shutdown in main
+		log.Fatalf("Error connecting to database: %s", err)
 	}
 
 	c.Set(id, db, func() {
@@ -207,4 +209,36 @@ func (c *Boot) Storage() *sqlx.DB {
 	})
 
 	return db
+}
+
+func (c *Boot) Repository() repository.Repository {
+	id := "Repository"
+	if s, ok := c.Get(id).(repository.Repository); ok {
+		return s
+	}
+
+	repo, err := repository.New(c.Storage())
+	if err != nil {
+		log.Fatalf("Error creating repository: %s", err)
+	}
+
+	c.Set(id, repo, nil)
+
+	return repo
+}
+
+func (c *Boot) APIService() service.Service {
+	id := "API Service"
+	if s, ok := c.Get(id).(service.Service); ok {
+		return s
+	}
+
+	s, err := service.New(c.Repository(), c.Config().API.AuthMethod)
+	if err != nil {
+		log.Fatalf("Error creating API service: %s", err)
+	}
+
+	c.Set(id, s, nil)
+
+	return s
 }

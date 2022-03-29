@@ -2,11 +2,12 @@ package api
 
 import (
 	"errors"
+	"net/http"
+	"sync"
+
 	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	"net/http"
-	"sync"
 )
 
 var router = struct {
