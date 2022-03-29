@@ -1,23 +1,20 @@
 package app
 
 import (
-	"github.com/dmytro-vovk/tro/internal/storage"
+	"github.com/jmoiron/sqlx"
 )
 
 type Application struct {
 	responseCounter int
 	streamer        Streamer
-	storage         *storage.Storage
 }
 
 type Streamer interface {
 	Notify(string, interface{})
 }
 
-func New(db *storage.Storage) *Application {
-	return &Application{
-		storage: db,
-	}
+func New(db *sqlx.DB) *Application {
+	return &Application{}
 }
 
 func (a *Application) SetStreamer(s Streamer) {

@@ -3,9 +3,10 @@
     "listen": ":80"
   },
   "api": {
-    "listen": ":8080"
+    "listen": ":8080",
+    "auth_method": "jwt"
   },
   "database": {
-    "dsn": "tro-user:qwvkUB9f7AVtPLnf@/tro"
+    "driver_name": "mysql"
   }
 }

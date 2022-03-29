@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/dmytro-vovk/tro/internal/api"
 	"io"
 	"log"
 	"os"
@@ -11,11 +12,9 @@ type Config struct {
 	WebServer struct {
 		Listen string `json:"listen"`
 	} `json:"webserver"`
-	API struct {
-		Listen string `json:"listen"`
-	} `json:"api"`
+	API      api.Config `json:"api"`
 	Database struct {
-		DSN string `json:"dsn"`
+		DriverName string `json:"driver_name"`
 	} `json:"database"`
 }
 

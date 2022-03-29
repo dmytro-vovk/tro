@@ -2,6 +2,8 @@ package boot
 
 import (
 	"context"
+	"github.com/dmytro-vovk/tro/pkg/database"
+	"github.com/jmoiron/sqlx"
 	"log"
 	"net/http"
 	"os"
@@ -10,7 +12,6 @@ import (
 	"github.com/dmytro-vovk/tro/internal/api"
 	"github.com/dmytro-vovk/tro/internal/app"
 	"github.com/dmytro-vovk/tro/internal/boot/config"
-	"github.com/dmytro-vovk/tro/internal/storage"
 	"github.com/dmytro-vovk/tro/internal/webserver"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/home"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
@@ -32,7 +33,7 @@ func New() (*Boot, func()) {
 }
 
 func (c *Boot) Config() *config.Config {
-	id := "Config"
+	const id = "Config"
 	if s, ok := c.Get(id).(*config.Config); ok {
 		return s
 	}
@@ -50,7 +51,7 @@ func (c *Boot) Config() *config.Config {
 }
 
 func (c *Boot) Application() *app.Application {
-	id := "Application"
+	const id = "Application"
 	if s, ok := c.Get(id).(*app.Application); ok {
 		return s
 	}
@@ -62,21 +63,23 @@ func (c *Boot) Application() *app.Application {
 	return a
 }
 
-func (c *Boot) API() *api.API {
-	id := "API"
-	if s, ok := c.Get(id).(*api.API); ok {
+func (c *Boot) API() *api.Handler {
+	const id = "API"
+	if s, ok := c.Get(id).(*api.Handler); ok {
 		return s
 	}
 
-	a := api.New(c.Storage())
+	handler, err := api.NewHandler(c.Storage(), c.Config().API)
+	if err != nil {
+		log.Panic(err) // todo: this error types should be thrown outside with shutdown in main
+	}
+	c.Set(id, handler, nil)
 
-	c.Set(id, a, nil)
-
-	return a
+	return handler
 }
 
 func (c *Boot) WebRouter() http.HandlerFunc {
-	id := "Web Router"
+	const id = "Web Router"
 	if s, ok := c.Get(id).(http.HandlerFunc); ok {
 		return s
 	}
@@ -98,7 +101,7 @@ func (c *Boot) WebRouter() http.HandlerFunc {
 }
 
 func (c *Boot) Webserver() *webserver.Webserver {
-	id := "Web Server"
+	const id = "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
@@ -119,25 +122,20 @@ func (c *Boot) Webserver() *webserver.Webserver {
 	return s
 }
 
-func (c *Boot) APIRouter() http.HandlerFunc {
-	id := "API Router"
-	if s, ok := c.Get(id).(http.HandlerFunc); ok {
+func (c *Boot) APIRouter() http.Handler {
+	const id = "API Router"
+	if s, ok := c.Get(id).(http.Handler); ok {
 		return s
 	}
 
-	a := c.API()
-
-	r := router.New(
-		router.CatchAll(a.Handle404()),
-	)
-
+	r := c.API().Router()
 	c.Set(id, r, nil)
 
 	return r
 }
 
 func (c *Boot) APIServer() *webserver.Webserver {
-	id := "Web Server"
+	const id = "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
@@ -146,7 +144,6 @@ func (c *Boot) APIServer() *webserver.Webserver {
 		c.APIRouter(),
 		c.Config().API.Listen,
 	)
-
 	c.Set(id, s, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -159,7 +156,7 @@ func (c *Boot) APIServer() *webserver.Webserver {
 }
 
 func (c *Boot) WebsocketHandler() *ws.Handler {
-	id := "WS Handler"
+	const id = "WS Handler"
 	if s, ok := c.Get(id).(*ws.Handler); ok {
 		return s
 	}
@@ -172,7 +169,7 @@ func (c *Boot) WebsocketHandler() *ws.Handler {
 }
 
 func (c *Boot) WSClient() *client.Client {
-	id := "WS Client"
+	const id = "WS Client"
 	if s, ok := c.Get(id).(*client.Client); ok {
 		return s
 	}
@@ -192,19 +189,22 @@ func (c *Boot) WSClient() *client.Client {
 	return s
 }
 
-func (c *Boot) Storage() *storage.Storage {
-	id := "Database"
-	if s, ok := c.Get(id).(*storage.Storage); ok {
+func (c *Boot) Storage() *sqlx.DB {
+	const id = "Database"
+	if s, ok := c.Get(id).(*sqlx.DB); ok {
 		return s
 	}
 
-	s := storage.New(c.Config().Database.DSN)
+	db, err := database.New(c.Config().Database.DriverName)
+	if err != nil {
+		log.Panic(err) // todo: this error types should be thrown outside with shutdown in main
+	}
 
-	c.Set(id, s, func() {
-		if err := s.Close(); err != nil {
+	c.Set(id, db, func() {
+		if err := db.Close(); err != nil {
 			log.Printf("Error closing database: %s", err)
 		}
 	})
 
-	return s
+	return db
 }

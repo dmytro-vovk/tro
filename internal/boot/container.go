@@ -69,6 +69,7 @@ func (c *Container) Get(name string) interface{} {
 func (c *Container) shutdown() {
 	c.m.Lock()
 
+	// todo: add check isStopped
 	for i := len(c.shutdownFn) - 1; i >= 0; i-- {
 		log.Printf("Shutting down %s...", c.shutdownFn[i].name)
 
