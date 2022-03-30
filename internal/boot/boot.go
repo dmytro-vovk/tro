@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/dmytro-vovk/tro/internal/api"
+	"github.com/dmytro-vovk/tro/internal/api/repository"
+	"github.com/dmytro-vovk/tro/internal/api/service"
 	"github.com/dmytro-vovk/tro/internal/app"
 	"github.com/dmytro-vovk/tro/internal/boot/config"
-	"github.com/dmytro-vovk/tro/internal/storage"
 	"github.com/dmytro-vovk/tro/internal/webserver"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/home"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
 	"github.com/dmytro-vovk/tro/internal/webserver/router"
+	"github.com/dmytro-vovk/tro/pkg/database"
+	"github.com/jmoiron/sqlx"
 )
 
 type Boot struct {
@@ -32,7 +35,7 @@ func New() (*Boot, func()) {
 }
 
 func (c *Boot) Config() *config.Config {
-	id := "Config"
+	const id = "Config"
 	if s, ok := c.Get(id).(*config.Config); ok {
 		return s
 	}
@@ -50,7 +53,7 @@ func (c *Boot) Config() *config.Config {
 }
 
 func (c *Boot) Application() *app.Application {
-	id := "Application"
+	const id = "Application"
 	if s, ok := c.Get(id).(*app.Application); ok {
 		return s
 	}
@@ -62,21 +65,21 @@ func (c *Boot) Application() *app.Application {
 	return a
 }
 
-func (c *Boot) API() *api.API {
-	id := "API"
-	if s, ok := c.Get(id).(*api.API); ok {
+func (c *Boot) API() *api.Handler {
+	const id = "API"
+	if s, ok := c.Get(id).(*api.Handler); ok {
 		return s
 	}
 
-	a := api.New(c.Storage())
+	handler := api.NewHandler(c.APIService())
 
-	c.Set(id, a, nil)
+	c.Set(id, handler, nil)
 
-	return a
+	return handler
 }
 
 func (c *Boot) WebRouter() http.HandlerFunc {
-	id := "Web Router"
+	const id = "Web Router"
 	if s, ok := c.Get(id).(http.HandlerFunc); ok {
 		return s
 	}
@@ -98,7 +101,7 @@ func (c *Boot) WebRouter() http.HandlerFunc {
 }
 
 func (c *Boot) Webserver() *webserver.Webserver {
-	id := "Web Server"
+	const id = "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
@@ -119,25 +122,20 @@ func (c *Boot) Webserver() *webserver.Webserver {
 	return s
 }
 
-func (c *Boot) APIRouter() http.HandlerFunc {
-	id := "API Router"
-	if s, ok := c.Get(id).(http.HandlerFunc); ok {
+func (c *Boot) APIRouter() http.Handler {
+	const id = "API Router"
+	if s, ok := c.Get(id).(http.Handler); ok {
 		return s
 	}
 
-	a := c.API()
-
-	r := router.New(
-		router.CatchAll(a.Handle404()),
-	)
-
+	r := c.API().Router()
 	c.Set(id, r, nil)
 
 	return r
 }
 
 func (c *Boot) APIServer() *webserver.Webserver {
-	id := "Web Server"
+	const id = "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
@@ -159,7 +157,7 @@ func (c *Boot) APIServer() *webserver.Webserver {
 }
 
 func (c *Boot) WebsocketHandler() *ws.Handler {
-	id := "WS Handler"
+	const id = "WS Handler"
 	if s, ok := c.Get(id).(*ws.Handler); ok {
 		return s
 	}
@@ -172,7 +170,7 @@ func (c *Boot) WebsocketHandler() *ws.Handler {
 }
 
 func (c *Boot) WSClient() *client.Client {
-	id := "WS Client"
+	const id = "WS Client"
 	if s, ok := c.Get(id).(*client.Client); ok {
 		return s
 	}
@@ -192,19 +190,54 @@ func (c *Boot) WSClient() *client.Client {
 	return s
 }
 
-func (c *Boot) Storage() *storage.Storage {
-	id := "Database"
-	if s, ok := c.Get(id).(*storage.Storage); ok {
+func (c *Boot) Storage() *sqlx.DB {
+	const id = "Database"
+	if s, ok := c.Get(id).(*sqlx.DB); ok {
 		return s
 	}
 
-	s := storage.New(c.Config().Database.DSN)
+	db, err := database.New(c.Config().Database.DriverName)
+	if err != nil {
+		log.Fatalf("Error connecting to database: %s", err)
+	}
 
-	c.Set(id, s, func() {
-		if err := s.Close(); err != nil {
+	c.Set(id, db, func() {
+		if err := db.Close(); err != nil {
 			log.Printf("Error closing database: %s", err)
 		}
 	})
+
+	return db
+}
+
+func (c *Boot) Repository() repository.Repository {
+	const id = "Repository"
+	if s, ok := c.Get(id).(repository.Repository); ok {
+		return s
+	}
+
+	repo, err := repository.New(c.Storage())
+	if err != nil {
+		log.Fatalf("Error creating repository: %s", err)
+	}
+
+	c.Set(id, repo, nil)
+
+	return repo
+}
+
+func (c *Boot) APIService() service.Service {
+	const id = "API Service"
+	if s, ok := c.Get(id).(service.Service); ok {
+		return s
+	}
+
+	s, err := service.New(c.Repository(), c.Config().API.AuthMethod)
+	if err != nil {
+		log.Fatalf("Error creating API service: %s", err)
+	}
+
+	c.Set(id, s, nil)
 
 	return s
 }
