@@ -11,7 +11,7 @@ import (
 type Container struct {
 	items      sync.Map
 	shutdownFn []shutdownFn
-	m          sync.Mutex
+	once       sync.Once
 }
 
 type shutdownFn struct {
@@ -67,18 +67,15 @@ func (c *Container) Get(name string) interface{} {
 }
 
 func (c *Container) shutdown() {
-	c.m.Lock()
+	c.once.Do(func() {
+		for i := len(c.shutdownFn) - 1; i >= 0; i-- {
+			log.Printf("Shutting down %s...", c.shutdownFn[i].name)
 
-	// todo: add check isStopped
-	for i := len(c.shutdownFn) - 1; i >= 0; i-- {
-		log.Printf("Shutting down %s...", c.shutdownFn[i].name)
+			c.shutdownFn[i].fn()
 
-		c.shutdownFn[i].fn()
+			log.Printf("Shutting down %s complete", c.shutdownFn[i].name)
+		}
 
-		log.Printf("Shutting down %s complete", c.shutdownFn[i].name)
-	}
-
-	c.shutdownFn = c.shutdownFn[0:0]
-
-	c.m.Unlock()
+		c.shutdownFn = c.shutdownFn[0:0]
+	})
 }

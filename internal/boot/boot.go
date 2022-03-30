@@ -7,12 +7,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/dmytro-vovk/tro/internal/api"
 	"github.com/dmytro-vovk/tro/internal/api/repository"
 	"github.com/dmytro-vovk/tro/internal/api/service"
-	"github.com/dmytro-vovk/tro/pkg/database"
-	"github.com/jmoiron/sqlx"
-
-	"github.com/dmytro-vovk/tro/internal/api"
 	"github.com/dmytro-vovk/tro/internal/app"
 	"github.com/dmytro-vovk/tro/internal/boot/config"
 	"github.com/dmytro-vovk/tro/internal/webserver"
@@ -20,6 +17,8 @@ import (
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
 	"github.com/dmytro-vovk/tro/internal/webserver/router"
+	"github.com/dmytro-vovk/tro/pkg/database"
+	"github.com/jmoiron/sqlx"
 )
 
 type Boot struct {
@@ -212,7 +211,7 @@ func (c *Boot) Storage() *sqlx.DB {
 }
 
 func (c *Boot) Repository() repository.Repository {
-	id := "Repository"
+	const id = "Repository"
 	if s, ok := c.Get(id).(repository.Repository); ok {
 		return s
 	}
@@ -228,7 +227,7 @@ func (c *Boot) Repository() repository.Repository {
 }
 
 func (c *Boot) APIService() service.Service {
-	id := "API Service"
+	const id = "API Service"
 	if s, ok := c.Get(id).(service.Service); ok {
 		return s
 	}
