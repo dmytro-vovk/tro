@@ -19,7 +19,7 @@ var router = struct {
 
 func (h *Handler) Router() http.Handler {
 	router.once.Do(func() {
-		router.Use(middleware.ErrorHandler(logrus.New()))
+		router.Use(middleware.Logger(logrus.New()))
 
 		auth := router.Group("/auth")
 		{
