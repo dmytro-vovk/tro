@@ -20,9 +20,13 @@ var router = struct {
 func (h *Handler) Router() http.Handler {
 	router.once.Do(func() {
 		logrus.SetLevel(logrus.DebugLevel)
-		//logrus.SetFormatter(&logrus.JSONFormatter{
-		//	PrettyPrint: true,
-		//})
+		logrus.SetFormatter(&logrus.JSONFormatter{
+			DisableHTMLEscape: true,
+			FieldMap: logrus.FieldMap{
+				logrus.FieldKeyMsg: "message",
+			},
+			PrettyPrint: true,
+		})
 		router.Use(middleware.Logger)
 
 		auth := router.Group("/auth")

@@ -93,15 +93,16 @@ func Logger(c *gin.Context) {
 	c.Next()
 	code := c.Writer.Status()
 
+	var apiErr error
 	if code >= http.StatusBadRequest {
 		if l := len(c.Errors); l >= 2 {
 			for _, ginErr := range c.Errors[:l-1] {
-				entry.Info("API preceding error: ", ginErr)
+				entry.Infoln("API preceding error:", ginErr)
 			}
 		}
 
-		if err := c.Errors.Last(); err != nil {
-			c.JSON(code, err)
+		if apiErr = c.Errors.Last(); apiErr != nil {
+			c.JSON(code, apiErr)
 		}
 	}
 
@@ -111,10 +112,10 @@ func Logger(c *gin.Context) {
 	})
 	switch {
 	case code >= http.StatusBadRequest && code < http.StatusInternalServerError:
-		entry.Warning("API error: ", err)
+		entry.Warningln("API error:", apiErr)
 	case code >= http.StatusInternalServerError:
-		entry.Error("API error: ", err)
+		entry.Errorln("API error:", apiErr)
 	default:
-		entry.Debug("API success")
+		entry.Debugln("API success")
 	}
 }
