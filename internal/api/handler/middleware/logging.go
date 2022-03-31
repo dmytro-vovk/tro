@@ -2,140 +2,119 @@ package middleware
 
 import (
 	"bytes"
-	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"io"
-	"time"
+	"net/http"
 )
 
-type logWriter struct {
-	gin.ResponseWriter
-	*logrus.Entry
-	req      map[string]interface{}
-	resp     map[string]interface{}
-	respBody *bytes.Buffer
+type request struct {
+	ID        string `json:"id"` // todo: implement
+	UserAgent string `json:"user_agent"`
+	Scheme    string `json:"scheme"`
+	Host      string `json:"host"`
+	Path      string `json:"path"`
+	Method    string `json:"method"`
+	Body      string `json:"body,omitempty"`
 }
 
-// newLogWriter must be called before c.Next()
-func newLogWriter(c *gin.Context, e *logrus.Entry) (*logWriter, error) {
-	lw := &logWriter{
-		ResponseWriter: c.Writer,
-		Entry:          e,
-		req: map[string]interface{}{
-			"scheme": getScheme(c),
-			"host":   c.Request.URL.Hostname(),
-			"path":   c.Request.URL.EscapedPath(),
-			"method": c.Request.Method,
-		},
-		resp:     map[string]interface{}{},
-		respBody: &bytes.Buffer{},
-	}
-	lw.withField("request", lw.req)
-
-	body, err := getPayload(c)
-	if err != nil {
-		return nil, err
-	}
-	lw.req["body"] = jsonify(body)
-
-	c.Writer = lw
-	return lw, nil
-}
-
-func (w logWriter) Write(b []byte) (int, error) {
-	w.respBody.Write(b)
-	return w.ResponseWriter.Write(b)
-}
-
-func (w logWriter) WriteString(s string) (int, error) {
-	w.respBody.WriteString(s)
-	return w.ResponseWriter.WriteString(s)
-}
-
-func (w *logWriter) withFields(fields logrus.Fields) *logrus.Entry {
-	w.Entry = w.Entry.WithFields(fields)
-	return w.Entry
-}
-
-func (w *logWriter) withField(key string, value interface{}) *logrus.Entry {
-	w.Entry = w.Entry.WithField(key, value)
-	return w.Entry
-}
-
-func Logger(logger *logrus.Logger) gin.HandlerFunc {
-	//logger.SetFormatter(&logrus.JSONFormatter{
-	//	PrettyPrint: true,
-	//})
-	logger.SetLevel(logrus.DebugLevel)
-
-	return func(c *gin.Context) {
-		lw, err := newLogWriter(c, logger.WithFields(logrus.Fields{
-			"client_ip": c.ClientIP(),
-			"user_id":   "1",
-		}))
-		if err != nil {
-			lw.WithFields(logrus.Fields{
-				"package":  "middleware",
-				"function": "newLogWriter",
-			}).Errorf("Can't get log writer: %s", err)
-			return
-		}
-
-		start := time.Now()
-		c.Next()
-
-		code := c.Writer.Status()
-		lw.resp["code"] = code
-
-		if code >= 400 {
-			const format = "API error: %s\n"
-			if l := len(c.Errors); l >= 2 {
-				for _, ginErr := range c.Errors[:l-2] {
-					lw.Warningf(format, ginErr)
-				}
-			}
-
-			if err := c.Errors.Last(); err != nil {
-				c.JSON(code, err)
-				lw.withField("latency", time.Since(start).String())
-				lw.resp["body"] = jsonify(lw.respBody.Bytes())
-				lw.withField("response", lw.resp).Errorf(format, err)
-			}
-
-			return
-		}
-
-		lw.withField("latency", time.Since(start).String())
-		lw.resp["body"] = jsonify(lw.respBody.Bytes())
-		lw.Debug("Success")
-	}
-}
-
-func getScheme(c *gin.Context) string {
+func newRequest(c *gin.Context) (*request, error) {
+	scheme := "http"
 	if c.Request.TLS != nil {
-		return "https"
+		scheme = "https"
 	}
 
-	return "http"
-}
+	req := &request{
+		UserAgent: c.Request.UserAgent(),
+		Scheme:    scheme,
+		Host:      c.Request.Host,
+		Path:      c.Request.URL.EscapedPath(),
+		Method:    c.Request.Method,
+	}
 
-// getPayload must be called before c.Next()
-func getPayload(c *gin.Context) ([]byte, error) {
 	payload, err := c.GetRawData()
 	if err != nil {
-		return nil, err
+		return req, err
 	}
 
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(payload))
-	return payload, nil
+	req.Body = string(payload)
+	return req, nil
 }
 
-func jsonify(payload []byte) interface{} {
-	var obj interface{}
-	if err := json.Unmarshal(payload, &obj); err != nil {
-		return string(payload)
+// todo: mb should implement string method
+type response struct {
+	Code int    `json:"code"`
+	Body string `json:"body,omitempty"`
+}
+
+type responseWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func newResponseWriter(c *gin.Context) *responseWriter {
+	w := &responseWriter{
+		ResponseWriter: c.Writer,
+		body:           &bytes.Buffer{},
+	}
+	c.Writer = w
+	return w
+}
+
+func (w *responseWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *responseWriter) WriteString(s string) (int, error) {
+	w.body.WriteString(s)
+	return w.ResponseWriter.WriteString(s)
+}
+
+func Logger(c *gin.Context) {
+	req, err := newRequest(c)
+	entry := logrus.WithFields(logrus.Fields{
+		"client_ip": c.ClientIP(),
+		"user_id":   "1",
+		"request":   req,
+	})
+	if err != nil {
+		entry.WithFields(logrus.Fields{
+			"package":  "middleware",
+			"function": "newRequest",
+		}).Error("Can't get request body:", err)
+		return
 	}
 
-	return obj
+	// responseWriter must be declared before c.Next() for copying data from the c.Writer
+	// but the response code we will get only when the chain stop
+	w := newResponseWriter(c)
+	c.Next()
+	code := c.Writer.Status()
+
+	if code >= http.StatusBadRequest {
+		if l := len(c.Errors); l >= 2 {
+			for _, ginErr := range c.Errors[:l-1] {
+				entry.Info("API preceding error: ", ginErr)
+			}
+		}
+
+		if err := c.Errors.Last(); err != nil {
+			c.JSON(code, err)
+		}
+	}
+
+	entry = entry.WithField("response", &response{
+		Code: code,
+		Body: w.body.String(),
+	})
+	switch {
+	case code >= http.StatusBadRequest && code < http.StatusInternalServerError:
+		entry.Warning("API error: ", err)
+	case code >= http.StatusInternalServerError:
+		entry.Error("API error: ", err)
+	default:
+		entry.Debug("API success")
+	}
 }
