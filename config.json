@@ -1,6 +1,9 @@
 {
   "webserver": {
-    "listen": ":80"
+    "listen": ":80",
+    "tls": {
+      "enabled": false
+    }
   },
   "api": {
     "listen": ":8080",

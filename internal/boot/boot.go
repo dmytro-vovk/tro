@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/dmytro-vovk/tro/internal/webserver/router"
 	"github.com/dmytro-vovk/tro/pkg/database"
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 type Boot struct {
@@ -78,9 +80,9 @@ func (c *Boot) API() *api.Handler {
 	return handler
 }
 
-func (c *Boot) WebRouter() http.HandlerFunc {
+func (c *Boot) WebRouter() http.Handler {
 	const id = "Web Router"
-	if s, ok := c.Get(id).(http.HandlerFunc); ok {
+	if s, ok := c.Get(id).(http.Handler); ok {
 		return s
 	}
 
@@ -100,15 +102,61 @@ func (c *Boot) WebRouter() http.HandlerFunc {
 	return r
 }
 
+func (c *Boot) TLSManager() *autocert.Manager {
+	const id = "TLS Manager"
+	if s, ok := c.Get(id).(*autocert.Manager); ok {
+		return s
+	}
+
+	tlsConfig := c.Config().WebServer.TLS
+
+	s := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache(tlsConfig.CertDir),
+		Email:      "dmytro.vovk@pm.me",
+		HostPolicy: autocert.HostWhitelist("tro.pw"),
+	}
+
+	c.Set(id, s, nil)
+
+	return s
+}
+
+func (c *Boot) TLSConfig() *tls.Config {
+	const id = "TLS Config"
+	if s, ok := c.Get(id).(*tls.Config); ok {
+		return s
+	}
+
+	tlsConfig := c.Config().WebServer.TLS
+
+	if !tlsConfig.Enabled {
+		return nil
+	}
+
+	s := c.TLSManager().TLSConfig()
+
+	c.Set(id, s, nil)
+
+	return s
+}
+
 func (c *Boot) Webserver() *webserver.Webserver {
 	const id = "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
 
+	handler := c.WebRouter()
+
+	if c.Config().WebServer.TLS.Enabled {
+		handler = c.TLSManager().HTTPHandler(handler)
+	}
+
 	s := webserver.New(
-		c.WebRouter(),
+		handler,
 		c.Config().WebServer.Listen,
+		c.TLSConfig(),
 	)
 
 	c.Set(id, s, func() {
@@ -143,6 +191,7 @@ func (c *Boot) APIServer() *webserver.Webserver {
 	s := webserver.New(
 		c.APIRouter(),
 		c.Config().API.Listen,
+		nil,
 	)
 
 	c.Set(id, s, func() {
