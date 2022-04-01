@@ -1,14 +1,12 @@
 package api
 
 import (
-	"errors"
+	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
+	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"sync"
-
-	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
-	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -22,6 +20,8 @@ var (
 	log = &logrus.Logger{
 		Out: os.Stdout,
 		Formatter: &logrus.TextFormatter{
+			FullTimestamp:   true,
+			TimestampFormat: "2006-01-02 15:04:05",
 			FieldMap: logrus.FieldMap{
 				logrus.FieldKeyMsg: "message",
 			},
@@ -46,7 +46,6 @@ func (h *Handler) Router() http.Handler {
 		api := router.Group("/api")
 		{
 			api.GET("/hello-world", h.helloWorld)
-			api.POST("/hello-world", h.helloWorld)
 		}
 	})
 
@@ -54,25 +53,6 @@ func (h *Handler) Router() http.Handler {
 }
 
 func (h *Handler) helloWorld(c *gin.Context) {
-	if c.Request.Method == http.MethodPost {
-		var input struct {
-			Hello string `json:"hello" binding:"required"`
-			World string `json:"world"`
-		}
-		if err := c.BindJSON(&input); err != nil {
-			c.Error(errors.New("non-fatal error")).SetMeta(map[string]interface{}{
-				"fuel":      "diesel",
-				"transport": 2,
-			})
-
-			c.AbortWithError(http.StatusBadRequest, errors.New("fatal error")).SetMeta(map[string]interface{}{
-				"meta": "context",
-				"test": 999,
-			})
-			return
-		}
-	}
-
 	c.JSON(http.StatusOK, struct {
 		Message string `json:"message"`
 	}{

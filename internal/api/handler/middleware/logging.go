@@ -91,6 +91,13 @@ func (r *request) withFields(fields logrus.Fields) *logrus.Entry {
 	return r.log
 }
 
+type apiErr struct {
+	Code    int         `json:"code"`
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Details interface{} `json:"details,omitempty"`
+}
+
 // handleErrors must be called before handleResponse
 func (r *request) handleErrors(c *gin.Context) error {
 	code := c.Writer.Status()
@@ -105,7 +112,14 @@ func (r *request) handleErrors(c *gin.Context) error {
 	}
 
 	if err := c.Errors.Last(); err != nil {
-		c.JSON(code, err)
+		c.JSON(code, gin.H{
+			"error": apiErr{
+				Code:    code,
+				Status:  http.StatusText(code),
+				Message: err.Error(),
+				Details: err.Meta,
+			},
+		})
 		return err
 	}
 
