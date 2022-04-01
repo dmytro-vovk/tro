@@ -4,30 +4,37 @@ import (
 	"errors"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
 	"github.com/gin-gonic/gin"
 )
 
-var router = struct {
-	once sync.Once
-	*gin.Engine
-}{
-	Engine: gin.New(),
-}
+var (
+	router = struct {
+		once sync.Once
+		*gin.Engine
+	}{
+		Engine: gin.New(),
+	}
 
-func (h *Handler) Router() http.Handler {
-	router.once.Do(func() {
-		logrus.SetLevel(logrus.DebugLevel)
-		logrus.SetFormatter(&logrus.JSONFormatter{
-			DisableHTMLEscape: true,
+	log = &logrus.Logger{
+		Out: os.Stdout,
+		Formatter: &logrus.TextFormatter{
 			FieldMap: logrus.FieldMap{
 				logrus.FieldKeyMsg: "message",
 			},
-			PrettyPrint: true,
-		})
-		router.Use(middleware.Logger)
+		},
+		Hooks:    make(logrus.LevelHooks),
+		Level:    logrus.DebugLevel,
+		ExitFunc: os.Exit,
+	}
+)
+
+func (h *Handler) Router() http.Handler {
+	router.once.Do(func() {
+		router.Use(middleware.Logger(log))
 
 		auth := router.Group("/auth")
 		{
