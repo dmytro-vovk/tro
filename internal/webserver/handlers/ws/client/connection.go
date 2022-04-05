@@ -3,7 +3,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/dmytro-vovk/tro/internal/jsonrpc"
@@ -59,11 +59,11 @@ func (c *connection) Notify(method string, params interface{}) {
 func (c *connection) notify(notice jsonrpc.Request) bool {
 	select {
 	case c.sendC <- notice:
-		// log.Printf("[%s] Sending message:\n%s", c.conn.RemoteAddr(), notice) // too noisy
+		//logrus.Printf("[%s] Sending message:\n%s", c.conn.RemoteAddr(), notice) // too noisy
 		return true
 	default:
 		// try to change channel size
-		log.Printf("[%s] Couldn't send notification:\n%s", c.conn.RemoteAddr(), notice)
+		logrus.Printf("[%s] Couldn't send notification:\n%s", c.conn.RemoteAddr(), notice)
 		return false
 	}
 }
@@ -73,7 +73,7 @@ func (c *connection) receiver() {
 		msgType, msg, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[%s] Unexpected close error: %v", c.conn.RemoteAddr(), err)
+				logrus.Printf("[%s] Unexpected close error: %v", c.conn.RemoteAddr(), err)
 			}
 
 			close(c.doneC)
@@ -84,7 +84,7 @@ func (c *connection) receiver() {
 		case websocket.TextMessage:
 			go c.handleTextMessage(msg)
 		default:
-			log.Printf("[%s] Unknown message type: %d", c.conn.RemoteAddr(), msgType)
+			logrus.Printf("[%s] Unknown message type: %d", c.conn.RemoteAddr(), msgType)
 		}
 	}
 }
@@ -97,11 +97,11 @@ func (c *connection) sender() {
 			case jsonrpc.Response:
 			case jsonrpc.Request:
 			default:
-				log.Panicf("unknown response type: %T", t)
+				logrus.Panicf("unknown response type: %T", t)
 			}
 
 			if err := c.conn.WriteJSON(resp); err != nil {
-				log.Printf("[%s] Error sending message: %s", c.conn.RemoteAddr(), err)
+				logrus.Printf("[%s] Error sending message: %s", c.conn.RemoteAddr(), err)
 			}
 		case <-c.doneC:
 			return
@@ -112,14 +112,14 @@ func (c *connection) sender() {
 func (c *connection) handleTextMessage(msg []byte) {
 	var req jsonrpc.Request
 	if err := json.Unmarshal(msg, &req); err != nil {
-		log.Printf("[%s] Error decoding request: %s", c.conn.RemoteAddr(), err)
-		log.Printf("[%s] Request: %s", c.conn.RemoteAddr(), msg)
+		logrus.Printf("[%s] Error decoding request: %s", c.conn.RemoteAddr(), err)
+		logrus.Printf("[%s] Request: %s", c.conn.RemoteAddr(), msg)
 		c.sendC <- req.ErrorResponse(err)
 		return
 	}
 
 	if err := req.Valid(); err != nil {
-		log.Printf("[%s] Invalid request object: %s", c.conn.RemoteAddr(), err)
+		logrus.Printf("[%s] Invalid request object: %s", c.conn.RemoteAddr(), err)
 		c.sendC <- req.ErrorResponse(err)
 		return
 	}
@@ -136,13 +136,13 @@ func (c *connection) handleRequest(req jsonrpc.Request) {
 	if fn, ok := c.methods[req.Method]; ok {
 		data, err := fn.call(req.Params)
 		if err != nil {
-			log.Printf("[%s] RPC call %s(%s) error: %s", c.conn.RemoteAddr(), req.Method, req.Params, err.Error())
+			logrus.Printf("[%s] RPC call %s(%s) error: %s", c.conn.RemoteAddr(), req.Method, req.Params, err.Error())
 			c.sendC <- req.ErrorResponse(err)
 		} else {
 			c.sendC <- req.Response(data)
 		}
 	} else {
-		log.Printf("[%s] Requested method %q doesn't exist", c.conn.RemoteAddr(), req.Method)
+		logrus.Printf("[%s] Requested method %q doesn't exist", c.conn.RemoteAddr(), req.Method)
 		c.sendC <- req.ErrorResponse(fmt.Errorf("method %q doesn't exist", req.Method))
 	}
 }
@@ -150,8 +150,8 @@ func (c *connection) handleRequest(req jsonrpc.Request) {
 func (c *connection) handleNotification(notice jsonrpc.Request) {
 	var method string
 	if err := json.Unmarshal(notice.Params, &method); err != nil {
-		log.Printf("[%s] Error decoding method name: %s", c.conn.RemoteAddr(), err)
-		log.Printf("[%s] Params: %s", c.conn.RemoteAddr(), notice.Params)
+		logrus.Printf("[%s] Error decoding method name: %s", c.conn.RemoteAddr(), err)
+		logrus.Printf("[%s] Params: %s", c.conn.RemoteAddr(), notice.Params)
 		return
 	}
 
@@ -164,14 +164,14 @@ func (c *connection) handleNotification(notice jsonrpc.Request) {
 }
 
 func (c *connection) subscribe(method string) {
-	log.Printf("[%s] Subscribing to %q", c.conn.RemoteAddr(), method)
+	logrus.Printf("[%s] Subscribing to %q", c.conn.RemoteAddr(), method)
 	c.mutex.Lock()
 	c.subscriptions[method] = struct{}{}
 	c.mutex.Unlock()
 }
 
 func (c *connection) unsubscribe(method string) {
-	log.Printf("[%s] Unsubscribing from %q", c.conn.RemoteAddr(), method)
+	logrus.Printf("[%s] Unsubscribing from %q", c.conn.RemoteAddr(), method)
 	c.mutex.Lock()
 	delete(c.subscriptions, method)
 	c.mutex.Unlock()

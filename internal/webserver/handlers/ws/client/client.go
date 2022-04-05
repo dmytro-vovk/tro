@@ -1,7 +1,7 @@
 package client
 
 import (
-	"log"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 
@@ -58,9 +58,9 @@ func (c *Client) Notify(method string, params interface{}) {
 // Run handles single connection
 func (c *Client) Run(conn *websocket.Conn) {
 	start, addr := time.Now(), conn.RemoteAddr().String()
-	log.Printf("[%s] Websocket client connected", addr)
+	logrus.Printf("[%s] Websocket client connected", addr)
 	c.connections[addr] = NewConnection(conn, c.methods)
 	c.connections[addr].Run()
 	delete(c.connections, addr)
-	log.Printf("[%s] Websocket client disconnected after %s", addr, time.Since(start))
+	logrus.Printf("[%s] Websocket client disconnected after %s", addr, time.Since(start))
 }

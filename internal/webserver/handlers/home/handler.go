@@ -3,7 +3,7 @@ package home
 import (
 	"embed"
 	_ "embed"
-	"log"
+	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -12,7 +12,7 @@ var homePage []byte
 
 // Handler serves the all-in-one home page
 func Handler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("From %s %s %s", r.RemoteAddr, r.Method, r.URL.Path)
+	logrus.Printf("From %s %s %s", r.RemoteAddr, r.Method, r.URL.Path)
 
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -23,7 +23,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 
 	if _, err := w.Write(homePage); err != nil {
-		log.Printf("Error writing response to %s: %s", r.RemoteAddr, err)
+		logrus.Printf("Error writing response to %s: %s", r.RemoteAddr, err)
 	}
 }
 
@@ -40,7 +40,7 @@ func Scripts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript")
 
 	if _, err := w.Write(scripts); err != nil {
-		log.Printf("Error writing response to %s: %s", r.RemoteAddr, err)
+		logrus.Printf("Error writing response to %s: %s", r.RemoteAddr, err)
 	}
 }
 
@@ -57,7 +57,7 @@ func ScriptsMap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript")
 
 	if _, err := w.Write(scriptsMap); err != nil {
-		log.Printf("Error writing response to %s: %s", r.RemoteAddr, err)
+		logrus.Printf("Error writing response to %s: %s", r.RemoteAddr, err)
 	}
 }
 

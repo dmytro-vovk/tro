@@ -1,7 +1,7 @@
 package ws
 
 import (
-	"log"
+	"github.com/sirupsen/logrus"
 	"net/http"
 
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
@@ -23,7 +23,7 @@ func (h *Handler) Handler(w http.ResponseWriter, r *http.Request) {
 		CheckOrigin:       func(*http.Request) bool { return true },
 	}).Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("Error upgrading connection to websocket: %s", err)
+		logrus.Printf("Error upgrading connection to websocket: %s", err)
 		return
 	}
 

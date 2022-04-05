@@ -3,6 +3,7 @@ package webserver
 import (
 	"context"
 	"errors"
+	"github.com/sirupsen/logrus"
 	"io"
 	"log"
 	"net/http"
@@ -29,7 +30,7 @@ func New(listen string, handler http.Handler, writer io.Writer) *Webserver {
 }
 
 func (w *Webserver) Serve(name string) (err error) {
-	log.Printf("%s starting at %s", name, w.listen)
+	logrus.Printf("%s starting at %s", name, w.listen)
 
 	err = w.server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {

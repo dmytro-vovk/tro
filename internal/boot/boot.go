@@ -7,7 +7,6 @@ import (
 	"github.com/sirupsen/logrus/hooks/writer"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,11 +33,7 @@ type Boot struct {
 
 func New() (*Boot, func()) {
 	c, fn := NewContainer()
-	boot := Boot{
-		Container: c,
-	}
-
-	return &boot, fn
+	return &Boot{Container: c}, fn
 }
 
 func (c *Boot) Config() *config.Config {
@@ -113,7 +108,8 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		return s
 	}
 
-	w := c.Logger("webserver.log").WriterLevel(logrus.ErrorLevel)
+	l := c.Logger("webserver.log")
+	w := l.WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
 		c.Config().WebServer.Listen,
 		c.WebRouter(),
@@ -125,11 +121,11 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		defer cancel()
 
 		if err := s.Stop(ctx); err != nil {
-			log.Println("Error stopping web server:", err)
+			logrus.Println("Error stopping web server:", err)
 		}
 
 		if err := w.Close(); err != nil {
-			log.Println("Error closing web server error logger:", err)
+			logrus.Println("Error closing web server error logger:", err)
 		}
 	})
 
@@ -167,11 +163,11 @@ func (c *Boot) APIServer() *webserver.Webserver {
 		defer cancel()
 
 		if err := s.Stop(ctx); err != nil {
-			log.Println("Error stopping API server:", err)
+			logrus.Println("Error stopping API server:", err)
 		}
 
 		if err := w.Close(); err != nil {
-			log.Println("Error closing API server error logger:", err)
+			logrus.Println("Error closing API server error logger:", err)
 		}
 	})
 
@@ -220,12 +216,12 @@ func (c *Boot) Storage() *sqlx.DB {
 
 	db, err := database.New(c.Config().Database.DriverName)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %s", err)
+		logrus.Fatalf("Error connecting to database: %s", err)
 	}
 
 	c.Set(id, db, func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing database: %s", err)
+			logrus.Printf("Error closing database: %s", err)
 		}
 	})
 
@@ -240,7 +236,7 @@ func (c *Boot) Repository() repository.Repository {
 
 	repo, err := repository.New(c.Storage())
 	if err != nil {
-		log.Fatalf("Error creating repository: %s", err)
+		logrus.Fatalf("Error creating repository: %s", err)
 	}
 
 	c.Set(id, repo, nil)
@@ -256,7 +252,7 @@ func (c *Boot) APIService() service.Service {
 
 	s, err := service.New(c.Repository(), c.Config().API.AuthMethod)
 	if err != nil {
-		log.Fatalf("Error creating API service: %s", err)
+		logrus.Fatalf("Error creating API service: %s", err)
 	}
 
 	c.Set(id, s, nil)
@@ -326,11 +322,11 @@ func (c *Boot) Logger(filename string) *logrus.Logger {
 
 	c.Set(id, rotor, func() {
 		if err := rotor.Rotate(); err != nil {
-			log.Println("Error rotating log files:", err)
+			logrus.Println("Error rotating log files:", err)
 		}
 
 		if err := rotor.Close(); err != nil {
-			log.Println("Error closing log files rotator:", err)
+			logrus.Println("Error closing log files rotator:", err)
 		}
 	})
 
