@@ -3,8 +3,9 @@
     "listen": ":80"
   },
   "api": {
-    "listen": ":8080",
-    "auth_method": "jwt"
+    "auth_method": "jwt",
+    "log_file": "logs/api.log",
+    "listen": ":8080"
   },
   "database": {
     "driver_name": "mysql"

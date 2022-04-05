@@ -3,6 +3,7 @@ package webserver
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 )
@@ -16,12 +17,13 @@ type Webserver struct {
 	server *http.Server
 }
 
-func New(handler http.Handler, listen string) *Webserver {
+func New(listen string, handler http.Handler, writer io.Writer) *Webserver {
 	return &Webserver{
 		listen: listen,
 		server: &http.Server{
-			Addr:    listen,
-			Handler: handler,
+			Addr:     listen,
+			Handler:  handler,
+			ErrorLog: log.New(writer, "", 0),
 		},
 	}
 }

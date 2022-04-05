@@ -2,6 +2,10 @@ package boot
 
 import (
 	"context"
+	"github.com/rifflock/lfshook"
+	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/writer"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -65,13 +69,13 @@ func (c *Boot) Application() *app.Application {
 	return a
 }
 
-func (c *Boot) API() *api.Handler {
+func (c *Boot) API(log *logrus.Logger) *api.Handler {
 	const id = "API"
 	if s, ok := c.Get(id).(*api.Handler); ok {
 		return s
 	}
 
-	handler := api.NewHandler(c.APIService())
+	handler := api.NewHandler(log, c.APIService())
 
 	c.Set(id, handler, nil)
 
@@ -106,50 +110,65 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		return s
 	}
 
+	w := c.Logger("logs/webserver.log").WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
-		c.WebRouter(),
 		c.Config().WebServer.Listen,
+		c.WebRouter(),
+		w,
 	)
 
 	c.Set(id, s, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+
 		if err := s.Stop(ctx); err != nil {
-			log.Printf("Error stopping web server: %s", err)
+			log.Println("Error stopping web server:", err)
+		}
+
+		if err := w.Close(); err != nil {
+			log.Println("Error closing web server error logger:", err)
 		}
 	})
 
 	return s
 }
 
-func (c *Boot) APIRouter() http.Handler {
+func (c *Boot) APIRouter(log *logrus.Logger) http.Handler {
 	const id = "API Router"
 	if s, ok := c.Get(id).(http.Handler); ok {
 		return s
 	}
 
-	r := c.API().Router()
+	r := c.API(log).Router()
 	c.Set(id, r, nil)
 
 	return r
 }
 
 func (c *Boot) APIServer() *webserver.Webserver {
-	const id = "Web Server"
+	const id = "API Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
 
+	l := c.Logger(c.Config().API.LogFile)
+	w := l.WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
-		c.APIRouter(),
 		c.Config().API.Listen,
+		c.APIRouter(l),
+		w,
 	)
 
 	c.Set(id, s, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+
 		if err := s.Stop(ctx); err != nil {
-			log.Printf("Error stopping api server: %s", err)
+			log.Println("Error stopping API server:", err)
+		}
+
+		if err := w.Close(); err != nil {
+			log.Println("Error closing API server error logger:", err)
 		}
 	})
 
@@ -240,4 +259,59 @@ func (c *Boot) APIService() service.Service {
 	c.Set(id, s, nil)
 
 	return s
+}
+
+func (c *Boot) Logger(path string) *logrus.Logger {
+	var (
+		timestampFormat = "2006-01-02 15:04:05"
+		fieldMap        = logrus.FieldMap{
+			logrus.FieldKeyMsg: "message",
+		}
+	)
+
+	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Panicf("failed to open logfile %q: %s", path, err)
+	}
+
+	logger := &logrus.Logger{
+		Out: io.Discard,
+		Formatter: &logrus.TextFormatter{
+			ForceColors:     true,
+			FullTimestamp:   true,
+			TimestampFormat: timestampFormat,
+			FieldMap:        fieldMap,
+		},
+		Hooks:    logrus.LevelHooks{},
+		Level:    logrus.DebugLevel,
+		ExitFunc: os.Exit,
+	}
+
+	// Send logs with level higher than warning to stderr
+	logger.AddHook(&writer.Hook{
+		Writer: os.Stderr,
+		LogLevels: []logrus.Level{
+			logrus.PanicLevel,
+			logrus.FatalLevel,
+			logrus.ErrorLevel,
+			logrus.WarnLevel,
+		},
+	})
+
+	// Send info and debug logs to stdout
+	logger.AddHook(&writer.Hook{
+		Writer: os.Stdout,
+		LogLevels: []logrus.Level{
+			logrus.InfoLevel,
+			logrus.DebugLevel,
+		},
+	})
+
+	// Send all logs to file in JSON format
+	logger.AddHook(lfshook.NewHook(logFile, &logrus.JSONFormatter{
+		TimestampFormat: timestampFormat,
+		FieldMap:        fieldMap,
+	}))
+
+	return logger
 }

@@ -1,6 +1,7 @@
 /node_modules
 /app
 /db
+/logs
 
 .*
 .env

@@ -3,38 +3,20 @@ package api
 import (
 	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 	"net/http"
-	"os"
 	"sync"
 )
 
-var (
-	router = struct {
-		once sync.Once
-		*gin.Engine
-	}{
-		Engine: gin.New(),
-	}
-
-	log = &logrus.Logger{
-		Out: os.Stdout,
-		Formatter: &logrus.TextFormatter{
-			FullTimestamp:   true,
-			TimestampFormat: "2006-01-02 15:04:05",
-			FieldMap: logrus.FieldMap{
-				logrus.FieldKeyMsg: "message",
-			},
-		},
-		Hooks:    make(logrus.LevelHooks),
-		Level:    logrus.DebugLevel,
-		ExitFunc: os.Exit,
-	}
-)
+var router = struct {
+	*gin.Engine
+	once sync.Once
+}{
+	Engine: gin.New(),
+}
 
 func (h *Handler) Router() http.Handler {
 	router.once.Do(func() {
-		router.Use(middleware.Logger(log))
+		router.Use(middleware.Logger(h.log))
 
 		auth := router.Group("/auth")
 		{
@@ -53,6 +35,10 @@ func (h *Handler) Router() http.Handler {
 }
 
 func (h *Handler) helloWorld(c *gin.Context) {
+	h.log.Debug("Debug message")
+	h.log.Info("Info message")
+	h.log.Warning("Warning message")
+	h.log.Error("Error message")
 	c.JSON(http.StatusOK, struct {
 		Message string `json:"message"`
 	}{

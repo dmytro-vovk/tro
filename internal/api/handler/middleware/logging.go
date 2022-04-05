@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -17,20 +18,18 @@ func Logger(log *logrus.Logger) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		req, err := getRequest(c, log.WithFields(logrus.Fields{
-			"client_ip": c.ClientIP(),
+			"client_ip": c.ClientIP(), // todo: mb use it as user struct with IP and ID fields?
 			"user_id":   "1",
 		}))
+		defer req.handleResponse(c)
+
 		if err != nil {
-			req.withFields(logrus.Fields{
-				"package":  "middleware",
-				"function": "getRequest",
-			}).Errorln("Can't get log request:", err)
+			req.log.Errorln("Can't log request:", err)
+			c.AbortWithError(http.StatusBadRequest, err) // todo: should I do this?
 			return
 		}
 
 		c.Next()
-
-		req.handleResponse(c)
 	}
 }
 
@@ -65,7 +64,7 @@ func getRequest(c *gin.Context, e *logrus.Entry) (*request, error) {
 
 	payload, err := c.GetRawData()
 	if err != nil {
-		return r, err
+		return r, errors.Wrap(err, "can't read request body")
 	}
 
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(payload))
@@ -96,6 +95,10 @@ type apiErr struct {
 	Status  string      `json:"status"`
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`
+}
+
+func (e apiErr) Error() string {
+	return e.Message
 }
 
 // handleErrors must be called before handleResponse
