@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
 	"github.com/gin-gonic/gin"
+	"math/rand"
 	"net/http"
 	"sync"
 )
@@ -35,6 +36,11 @@ func (h *Handler) Router() http.Handler {
 }
 
 func (h *Handler) helloWorld(c *gin.Context) {
+	buf := make([]byte, 0, 1024*100)
+	for i := 0; i < cap(buf); i++ {
+		buf = append(buf, byte(rand.Intn(128)))
+	}
+
 	h.log.Debug("Debug message")
 	h.log.Info("Info message")
 	h.log.Warning("Warning message")
@@ -42,6 +48,6 @@ func (h *Handler) helloWorld(c *gin.Context) {
 	c.JSON(http.StatusOK, struct {
 		Message string `json:"message"`
 	}{
-		Message: "Hello World",
+		Message: string(buf),
 	})
 }

@@ -4,7 +4,7 @@
   },
   "api": {
     "auth_method": "jwt",
-    "log_file": "logs/api.log",
+    "log_file": "API.log",
     "listen": ":8080"
   },
   "database": {

@@ -5,10 +5,13 @@ import (
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dmytro-vovk/tro/internal/api"
@@ -110,7 +113,7 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		return s
 	}
 
-	w := c.Logger("logs/webserver.log").WriterLevel(logrus.ErrorLevel)
+	w := c.Logger("webserver.log").WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
 		c.Config().WebServer.Listen,
 		c.WebRouter(),
@@ -261,18 +264,16 @@ func (c *Boot) APIService() service.Service {
 	return s
 }
 
-func (c *Boot) Logger(path string) *logrus.Logger {
+func (c *Boot) Logger(filename string) *logrus.Logger {
+	id := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)) + " logger"
+
 	var (
+		path            = "/var/log/tro/" + filename
 		timestampFormat = "2006-01-02 15:04:05"
 		fieldMap        = logrus.FieldMap{
 			logrus.FieldKeyMsg: "message",
 		}
 	)
-
-	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Panicf("failed to open logfile %q: %s", path, err)
-	}
 
 	logger := &logrus.Logger{
 		Out: io.Discard,
@@ -287,31 +288,51 @@ func (c *Boot) Logger(path string) *logrus.Logger {
 		ExitFunc: os.Exit,
 	}
 
-	// Send logs with level higher than warning to stderr
-	logger.AddHook(&writer.Hook{
-		Writer: os.Stderr,
-		LogLevels: []logrus.Level{
-			logrus.PanicLevel,
-			logrus.FatalLevel,
-			logrus.ErrorLevel,
-			logrus.WarnLevel,
-		},
-	})
+	rotor := &lumberjack.Logger{
+		Filename:   path,
+		MaxSize:    1,
+		MaxAge:     1,
+		MaxBackups: 3,
+		Compress:   true,
+	}
 
-	// Send info and debug logs to stdout
-	logger.AddHook(&writer.Hook{
-		Writer: os.Stdout,
-		LogLevels: []logrus.Level{
-			logrus.InfoLevel,
-			logrus.DebugLevel,
+	for _, hook := range []logrus.Hook{
+		// Send logs with level higher than warning to stderr
+		&writer.Hook{
+			Writer: os.Stderr,
+			LogLevels: []logrus.Level{
+				logrus.PanicLevel,
+				logrus.FatalLevel,
+				logrus.ErrorLevel,
+				logrus.WarnLevel,
+			},
 		},
-	})
+		// Send info and debug logs to stdout
+		&writer.Hook{
+			Writer: os.Stdout,
+			LogLevels: []logrus.Level{
+				logrus.InfoLevel,
+				logrus.DebugLevel,
+			},
+		},
+		// Send all logs to file in JSON format with rotation
+		lfshook.NewHook(rotor, &logrus.JSONFormatter{
+			TimestampFormat: timestampFormat,
+			FieldMap:        fieldMap,
+		}),
+	} {
+		logger.AddHook(hook)
+	}
 
-	// Send all logs to file in JSON format
-	logger.AddHook(lfshook.NewHook(logFile, &logrus.JSONFormatter{
-		TimestampFormat: timestampFormat,
-		FieldMap:        fieldMap,
-	}))
+	c.Set(id, rotor, func() {
+		if err := rotor.Rotate(); err != nil {
+			log.Println("Error rotating log files:", err)
+		}
+
+		if err := rotor.Close(); err != nil {
+			log.Println("Error closing log files rotator:", err)
+		}
+	})
 
 	return logger
 }
