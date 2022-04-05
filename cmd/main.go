@@ -6,11 +6,8 @@ import (
 )
 
 func main() {
-	c, shutdown := boot.New()
-	defer shutdown()
-
-	*logrus.StandardLogger() = *c.Logger("system")
-	logrus.RegisterExitHandler(shutdown)
+	c := boot.New()
+	defer c.Shutdown()
 
 	go func() {
 		if err := c.APIServer().Serve("API server"); err != nil {

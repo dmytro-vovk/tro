@@ -27,13 +27,25 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var boot *Boot
+
 type Boot struct {
 	*Container
+	Shutdown func()
 }
 
-func New() (*Boot, func()) {
+func New() *Boot {
+	if boot != nil {
+		return boot
+	}
+
 	c, fn := NewContainer()
-	return &Boot{Container: c}, fn
+	boot = &Boot{Container: c, Shutdown: fn}
+
+	*logrus.StandardLogger() = *boot.Logger("system")
+	logrus.RegisterExitHandler(fn)
+
+	return boot
 }
 
 func (c *Boot) Config() *config.Config {
