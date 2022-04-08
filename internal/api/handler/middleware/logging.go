@@ -69,7 +69,7 @@ func newRequest(c *gin.Context) (*request, error) {
 	}
 
 	r.Body = prettify(body)
-	return r, errors.New("hand written error")
+	return r, nil
 }
 
 func (r *request) String() string { return jsonify(r) }
