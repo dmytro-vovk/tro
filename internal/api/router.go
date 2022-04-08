@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
 	"github.com/gin-gonic/gin"
 	"math/rand"
@@ -35,16 +36,24 @@ func (h *Handler) Router() http.Handler {
 	return router.Engine
 }
 
+var counter = 0
+
 func (h *Handler) helloWorld(c *gin.Context) {
-	buf := make([]byte, 0, 1024*100)
+	buf := make([]byte, 0, 64)
 	for i := 0; i < cap(buf); i++ {
-		buf = append(buf, byte(rand.Intn(128)))
+		buf = append(buf, byte(65+rand.Intn(26)))
 	}
 
 	h.log.Debug("Debug message")
 	h.log.Info("Info message")
-	h.log.Warning("Warning message")
-	h.log.Error("Error message")
+	if counter > 1 {
+		c.Error(errors.New("first error")).SetMeta(gin.H{"context": "first"})
+		c.AbortWithError(http.StatusInternalServerError, errors.New("second error")).SetMeta(gin.H{"context": "second"})
+		counter++
+		return
+	}
+
+	counter++
 	c.JSON(http.StatusOK, struct {
 		Message string `json:"message"`
 	}{

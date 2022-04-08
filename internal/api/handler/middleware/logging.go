@@ -10,6 +10,14 @@ import (
 	"net/http"
 )
 
+type errString string
+
+func (e errString) Error() string {
+	return string(e)
+}
+
+const errInvalidRequestBody errString = "invalid request body"
+
 func Logger(log *logrus.Logger) gin.HandlerFunc {
 	if f, ok := log.Formatter.(*logrus.TextFormatter); ok {
 		f.ForceQuote = false
@@ -17,15 +25,18 @@ func Logger(log *logrus.Logger) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		req, err := getRequest(c, log.WithFields(logrus.Fields{
-			"client_ip": c.ClientIP(), // todo: mb use it as user struct with IP and ID fields?
+		req, err := newRequest(c)
+		entry := log.WithFields(logrus.Fields{
+			"client_ip": c.ClientIP(),
 			"user_id":   "1",
-		}))
-		defer req.handleResponse(c)
+			"request":   req,
+		})
+
+		defer newResponseWriter(c).handle(c, entry)
 
 		if err != nil {
-			req.log.Errorln("Can't log request:", err)
-			c.AbortWithError(http.StatusBadRequest, err) // todo: should I do this?
+			entry.Warningln("Can't log request:", err)
+			c.AbortWithError(http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
@@ -41,114 +52,27 @@ type request struct {
 	Path      string      `json:"path"`
 	Method    string      `json:"method"`
 	Body      interface{} `json:"body,omitempty"`
-	rwt       *responseWriter
-	log       *logrus.Entry
 }
 
-func getRequest(c *gin.Context, e *logrus.Entry) (*request, error) {
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-
+func newRequest(c *gin.Context) (*request, error) {
 	r := &request{
 		UserAgent: c.Request.UserAgent(),
-		Scheme:    scheme,
+		Scheme:    getRequestScheme(c),
 		Host:      c.Request.Host,
 		Path:      c.Request.URL.EscapedPath(),
 		Method:    c.Request.Method,
-		rwt:       newResponseWriter(c),
-		log:       e,
 	}
-	r.withField("request", r)
 
-	payload, err := c.GetRawData()
+	body, err := getRequestBody(c)
 	if err != nil {
-		return r, errors.Wrap(err, "can't read request body")
+		return r, err
 	}
 
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(payload))
-	r.Body = getBody(payload)
-	return r, nil
+	r.Body = prettify(body)
+	return r, errors.New("hand written error")
 }
 
-// String used for pretty printing in logrus.Logger when set logrus.TextFormatter
-func (r *request) String() string {
-	b, err := json.Marshal(r)
-	if err != nil {
-		r.log.Panic(err)
-	}
-	return string(b)
-}
-
-func (r *request) withField(key string, value interface{}) *logrus.Entry {
-	return r.withFields(logrus.Fields{key: value})
-}
-
-func (r *request) withFields(fields logrus.Fields) *logrus.Entry {
-	r.log = r.log.WithFields(fields)
-	return r.log
-}
-
-type apiErr struct {
-	Code    int         `json:"code"`
-	Status  string      `json:"status"`
-	Message string      `json:"message"`
-	Details interface{} `json:"details,omitempty"`
-}
-
-func (e apiErr) Error() string {
-	return e.Message
-}
-
-// handleErrors must be called before handleResponse
-func (r *request) handleErrors(c *gin.Context) error {
-	code := c.Writer.Status()
-	if code < http.StatusBadRequest {
-		return nil
-	}
-
-	if l := len(c.Errors); l >= 2 {
-		for _, ginErr := range c.Errors[:l-1] {
-			r.log.Infoln("API preceding error:", ginErr)
-		}
-	}
-
-	if err := c.Errors.Last(); err != nil {
-		c.JSON(code, gin.H{
-			"error": apiErr{
-				Code:    code,
-				Status:  http.StatusText(code),
-				Message: err.Error(),
-				Details: err.Meta,
-			},
-		})
-		return err
-	}
-
-	return nil
-}
-
-// handleResponse must be called after c.Next()
-func (r *request) handleResponse(c *gin.Context) {
-	err := r.handleErrors(c)
-
-	resp := &response{
-		Code: c.Writer.Status(),
-		Body: getBody(r.rwt.body.Bytes()),
-		log:  r.log,
-	}
-
-	r.withField("response", resp)
-	switch {
-	case resp.isInfo(), resp.isSuccess(), resp.isRedirect():
-		r.log.Debug("API success")
-	case resp.isClientError():
-		r.log.Warningln("API error:", err)
-	case resp.isServerError():
-		r.log.Errorln("API error:", err)
-	}
-}
+func (r *request) String() string { return jsonify(r) }
 
 type responseWriter struct {
 	gin.ResponseWriter
@@ -174,52 +98,79 @@ func (w *responseWriter) WriteString(s string) (int, error) {
 	return w.ResponseWriter.WriteString(s)
 }
 
+func (w *responseWriter) handle(c *gin.Context, entry *logrus.Entry) {
+	code := c.Writer.Status()
+
+	if err := c.Errors.Last(); code >= http.StatusBadRequest && err != nil {
+		for i, ginErr := range c.Errors {
+			// todo: mb do something with ginErr.Meta
+			entry.Infof("%d of %d error in chain: %s", i+1, len(c.Errors), ginErr)
+		}
+
+		c.JSON(code, gin.H{
+			"error": apiErr{
+				Code:    code,
+				Status:  http.StatusText(code),
+				Message: err.Error(),
+				Details: err.Meta,
+			},
+		})
+	}
+
+	entry.WithField("response", &response{
+		Code: code,
+		Body: prettify(w.body.Bytes()),
+	}).Info("Request processed")
+}
+
+type apiErr struct {
+	Code    int         `json:"code"`
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Details interface{} `json:"details,omitempty"`
+}
+
+func (e apiErr) Error() string {
+	return e.Message
+}
+
 type response struct {
 	Code int         `json:"code"`
 	Body interface{} `json:"body,omitempty"`
-	log  *logrus.Entry
 }
 
-// String used for pretty printing in logrus.Logger when set logrus.TextFormatter
-func (r *response) String() string {
-	b, err := json.Marshal(r)
-	if err != nil {
-		r.log.Panic(err)
+func (r *response) String() string { return jsonify(r) }
+
+func getRequestScheme(c *gin.Context) string {
+	if c.Request.TLS != nil {
+		return "https"
 	}
-	return string(b)
+
+	return "http"
 }
 
-func (r *response) isInfo() bool {
-	return r.Code >= http.StatusContinue && r.Code <= http.StatusEarlyHints
+func getRequestBody(c *gin.Context) ([]byte, error) {
+	payload, err := c.GetRawData()
+	if err != nil {
+		return nil, errors.Wrap(err, "can't read request body")
+	}
+
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(payload))
+	return payload, nil
 }
 
-func (r *response) isSuccess() bool {
-	return r.Code >= http.StatusOK && r.Code <= http.StatusAlreadyReported ||
-		r.Code == http.StatusIMUsed
-}
-
-func (r *response) isRedirect() bool {
-	return r.Code >= http.StatusMultipleChoices && r.Code <= http.StatusPermanentRedirect
-}
-
-func (r *response) isClientError() bool {
-	return r.Code >= http.StatusBadRequest && r.Code <= http.StatusTeapot ||
-		r.Code >= http.StatusMisdirectedRequest && r.Code <= http.StatusUpgradeRequired ||
-		r.Code == http.StatusPreconditionRequired ||
-		r.Code == http.StatusTooManyRequests ||
-		r.Code == http.StatusRequestHeaderFieldsTooLarge ||
-		r.Code == http.StatusUnavailableForLegalReasons
-}
-
-func (r *response) isServerError() bool {
-	return r.Code >= http.StatusInternalServerError && r.Code <= http.StatusNetworkAuthenticationRequired
-}
-
-// getBody used for pretty printing in logrus.Logger
-func getBody(payload []byte) interface{} {
+func prettify(payload []byte) interface{} {
 	if json.Valid(payload) {
 		return json.RawMessage(payload)
 	}
 
 	return string(payload)
+}
+
+func jsonify(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		logrus.Panic(err)
+	}
+	return string(b)
 }
