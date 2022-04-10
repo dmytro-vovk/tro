@@ -15,7 +15,6 @@ type Config struct {
 	} `json:"webserver"`
 	API struct {
 		AuthMethod string `json:"auth_method"`
-		LogFile    string `json:"log_file"`
 		Listen     string `json:"listen"`
 	} `json:"api"`
 	Database struct {
