@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	runtime "github.com/banzaicloud/logrus-runtime-formatter"
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
@@ -285,11 +286,17 @@ func (c *Boot) Logger(filename string) *logrus.Logger {
 
 	logger := &logrus.Logger{
 		Out: io.Discard,
-		Formatter: &logrus.TextFormatter{
-			ForceColors:     true,
-			FullTimestamp:   true,
-			TimestampFormat: timestampFormat,
-			FieldMap:        fieldMap,
+		Formatter: &runtime.Formatter{
+			ChildFormatter: &logrus.TextFormatter{
+				ForceColors:     true,
+				FullTimestamp:   true,
+				TimestampFormat: timestampFormat,
+				FieldMap:        fieldMap,
+			},
+			Line:         true,
+			Package:      true,
+			File:         true,
+			BaseNameOnly: true,
 		},
 		Hooks:    logrus.LevelHooks{},
 		Level:    logrus.DebugLevel,
@@ -324,9 +331,15 @@ func (c *Boot) Logger(filename string) *logrus.Logger {
 			},
 		},
 		// Send all logs to file in JSON format with rotation
-		lfshook.NewHook(rotor, &logrus.JSONFormatter{
-			TimestampFormat: timestampFormat,
-			FieldMap:        fieldMap,
+		lfshook.NewHook(rotor, &runtime.Formatter{
+			ChildFormatter: &logrus.JSONFormatter{
+				TimestampFormat: timestampFormat,
+				FieldMap:        fieldMap,
+			},
+			Line:         true,
+			Package:      true,
+			File:         true,
+			BaseNameOnly: true,
 		}),
 	} {
 		logger.AddHook(hook)

@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+	runtime "github.com/banzaicloud/logrus-runtime-formatter"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -19,10 +20,7 @@ func (e errString) Error() string {
 const errInvalidRequestBody errString = "invalid request body"
 
 func Logger(log *logrus.Logger) gin.HandlerFunc {
-	if f, ok := log.Formatter.(*logrus.TextFormatter); ok {
-		f.ForceQuote = false
-		f.DisableQuote = true
-	}
+	setupFormatter(log.Formatter)
 
 	return func(c *gin.Context) {
 		req, err := newRequest(c)
@@ -41,6 +39,16 @@ func Logger(log *logrus.Logger) gin.HandlerFunc {
 		}
 
 		c.Next()
+	}
+}
+
+func setupFormatter(f logrus.Formatter) {
+	switch t := f.(type) {
+	case *logrus.TextFormatter:
+		t.ForceQuote = false
+		t.DisableQuote = true
+	case *runtime.Formatter:
+		setupFormatter(t.ChildFormatter)
 	}
 }
 
