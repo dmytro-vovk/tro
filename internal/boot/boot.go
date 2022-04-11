@@ -2,10 +2,17 @@ package boot
 
 import (
 	"context"
+	runtime "github.com/banzaicloud/logrus-runtime-formatter"
+	"github.com/rifflock/lfshook"
+	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/writer"
+	"gopkg.in/natefinch/lumberjack.v2"
+	"io"
 	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/dmytro-vovk/tro/internal/api"
@@ -23,17 +30,25 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
+var boot *Boot
+
 type Boot struct {
 	*Container
+	Shutdown func()
 }
 
-func New() (*Boot, func()) {
-	c, fn := NewContainer()
-	boot := Boot{
-		Container: c,
+func New() *Boot {
+	if boot != nil {
+		return boot
 	}
 
-	return &boot, fn
+	c, fn := NewContainer()
+	boot = &Boot{Container: c, Shutdown: fn}
+
+	*logrus.StandardLogger() = *boot.Logger()
+	logrus.RegisterExitHandler(fn)
+
+	return boot
 }
 
 func (c *Boot) Config() *config.Config {
@@ -67,13 +82,13 @@ func (c *Boot) Application() *app.Application {
 	return a
 }
 
-func (c *Boot) API() *api.Handler {
+func (c *Boot) API(log *logrus.Logger) *api.Handler {
 	const id = "API"
 	if s, ok := c.Get(id).(*api.Handler); ok {
 		return s
 	}
 
-	handler := api.NewHandler(c.APIService())
+	handler := api.NewHandler(log, c.APIService())
 
 	c.Set(id, handler, nil)
 
@@ -147,6 +162,13 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		return s
 	}
 
+	//l := c.Logger()
+	//w := l.WriterLevel(logrus.ErrorLevel)
+	//s := webserver.New(
+	//	c.Config().WebServer.Listen,
+	//	c.WebRouter(),
+	//	w,
+	
 	handler := c.WebRouter()
 
 	if c.Config().WebServer.TLS.Enabled {
@@ -162,43 +184,56 @@ func (c *Boot) Webserver() *webserver.Webserver {
 	c.Set(id, s, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+
 		if err := s.Stop(ctx); err != nil {
-			log.Printf("Error stopping web server: %s", err)
+			logrus.Println("Error stopping web server:", err)
+		}
+
+		if err := w.Close(); err != nil {
+			logrus.Println("Error closing web server error logger:", err)
 		}
 	})
 
 	return s
 }
 
-func (c *Boot) APIRouter() http.Handler {
+func (c *Boot) APIRouter(log *logrus.Logger) http.Handler {
 	const id = "API Router"
 	if s, ok := c.Get(id).(http.Handler); ok {
 		return s
 	}
 
-	r := c.API().Router()
+	r := c.API(log).Router()
 	c.Set(id, r, nil)
 
 	return r
 }
 
 func (c *Boot) APIServer() *webserver.Webserver {
-	const id = "Web Server"
+	const id = "API Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
 
+	l := c.Logger()
+	w := l.WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
-		c.APIRouter(),
 		c.Config().API.Listen,
+// 		c.APIRouter(l),
+// 		w,
 		nil,
 	)
 
 	c.Set(id, s, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+
 		if err := s.Stop(ctx); err != nil {
-			log.Printf("Error stopping api server: %s", err)
+			logrus.Println("Error stopping API server:", err)
+		}
+
+		if err := w.Close(); err != nil {
+			logrus.Println("Error closing API server error logger:", err)
 		}
 	})
 
@@ -247,12 +282,12 @@ func (c *Boot) Storage() *sqlx.DB {
 
 	db, err := database.New(c.Config().Database.DriverName)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %s", err)
+		logrus.Fatalf("Error connecting to database: %s", err)
 	}
 
 	c.Set(id, db, func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing database: %s", err)
+			logrus.Printf("Error closing database: %s", err)
 		}
 	})
 
@@ -267,7 +302,7 @@ func (c *Boot) Repository() repository.Repository {
 
 	repo, err := repository.New(c.Storage())
 	if err != nil {
-		log.Fatalf("Error creating repository: %s", err)
+		logrus.Fatalf("Error creating repository: %s", err)
 	}
 
 	c.Set(id, repo, nil)
@@ -283,10 +318,102 @@ func (c *Boot) APIService() service.Service {
 
 	s, err := service.New(c.Repository(), c.Config().API.AuthMethod)
 	if err != nil {
-		log.Fatalf("Error creating API service: %s", err)
+		logrus.Fatalf("Error creating API service: %s", err)
 	}
 
 	c.Set(id, s, nil)
 
 	return s
+}
+
+var logger struct {
+	*logrus.Logger
+	once sync.Once
+}
+
+func (c *Boot) Logger() *logrus.Logger {
+	logger.once.Do(func() {
+		const id = "Logger"
+
+		var (
+			path            = "/var/log/tro/tro.log"
+			timestampFormat = "2006-01-02 15:04:05"
+			fieldMap        = logrus.FieldMap{
+				logrus.FieldKeyMsg: "message",
+			}
+		)
+
+		logger.Logger = &logrus.Logger{
+			Out: io.Discard,
+			Formatter: &runtime.Formatter{
+				ChildFormatter: &logrus.TextFormatter{
+					ForceColors:     true,
+					FullTimestamp:   true,
+					TimestampFormat: timestampFormat,
+					FieldMap:        fieldMap,
+				},
+				Line:         true,
+				Package:      true,
+				File:         true,
+				BaseNameOnly: true,
+			},
+			Hooks:    logrus.LevelHooks{},
+			Level:    logrus.DebugLevel,
+			ExitFunc: os.Exit,
+		}
+
+		rotor := &lumberjack.Logger{
+			Filename:   path,
+			MaxSize:    1,
+			MaxAge:     1,
+			MaxBackups: 3,
+			Compress:   true,
+		}
+
+		for _, hook := range []logrus.Hook{
+			// Send logs with level higher than warning to stderr
+			&writer.Hook{
+				Writer: os.Stderr,
+				LogLevels: []logrus.Level{
+					logrus.PanicLevel,
+					logrus.FatalLevel,
+					logrus.ErrorLevel,
+					logrus.WarnLevel,
+				},
+			},
+			// Send info and debug logs to stdout
+			&writer.Hook{
+				Writer: os.Stdout,
+				LogLevels: []logrus.Level{
+					logrus.InfoLevel,
+					logrus.DebugLevel,
+				},
+			},
+			// Send all logs to file in JSON format with rotation
+			lfshook.NewHook(rotor, &runtime.Formatter{
+				ChildFormatter: &logrus.JSONFormatter{
+					TimestampFormat: timestampFormat,
+					FieldMap:        fieldMap,
+				},
+				Line:         true,
+				Package:      true,
+				File:         true,
+				BaseNameOnly: true,
+			}),
+		} {
+			logger.AddHook(hook)
+		}
+
+		c.Set(id, rotor, func() {
+			if err := rotor.Rotate(); err != nil {
+				logrus.Println("Error rotating log files:", err)
+			}
+
+			if err := rotor.Close(); err != nil {
+				logrus.Println("Error closing log files rotator:", err)
+			}
+		})
+	})
+
+	return logger.Logger
 }

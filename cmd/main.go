@@ -1,26 +1,21 @@
 package main
 
 import (
-	"log"
-
 	"github.com/dmytro-vovk/tro/internal/boot"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	log.SetFlags(log.Lshortfile)
+	c := boot.New()
+	defer c.Shutdown()
 
-	c, shutdown := boot.New()
-	defer shutdown()
-
-	/*
-		go func() {
-			if err := c.APIServer().Serve("API server"); err != nil {
-				log.Fatal(err)
-			}
-		}()
-	*/
+	go func() {
+		if err := c.APIServer().Serve("API server"); err != nil {
+			logrus.Fatal(err)
+		}
+	}()
 
 	if err := c.Webserver().Serve("Web server"); err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 }

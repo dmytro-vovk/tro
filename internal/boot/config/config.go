@@ -2,8 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -29,24 +29,24 @@ type Config struct {
 
 func Load(fileName string) *Config {
 	if err := godotenv.Load(".env"); err != nil {
-		log.Fatalf("Error loading environment variables: %s", err)
+		logrus.Fatalf("Error loading environment variables: %s", err)
 	}
 
 	f, err := os.Open(fileName)
 	if err != nil {
-		log.Fatalf("Error opening config file %s: %s", fileName, err)
+		logrus.Fatalf("Error opening config file %s: %s", fileName, err)
 	}
 
 	defer func(c io.Closer) {
 		if err := c.Close(); err != nil {
-			log.Printf("Error closing config file: %s", err)
+			logrus.Printf("Error closing config file: %s", err)
 		}
 	}(f)
 
 	var cfg Config
 
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
-		log.Fatalf("Error decoding config file %s: %s", fileName, err)
+		logrus.Fatalf("Error decoding config file %s: %s", fileName, err)
 	}
 
 	return &cfg

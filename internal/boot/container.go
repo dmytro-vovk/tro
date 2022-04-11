@@ -1,7 +1,7 @@
 package boot
 
 import (
-	"log"
+	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
 	"sync"
@@ -33,11 +33,11 @@ func (c *Container) arm(signals ...os.Signal) {
 	go func() {
 		s := <-sc
 
-		log.Printf("Got %v, shutting down...", s)
+		logrus.Printf("Got %v, shutting down...", s)
 
 		c.shutdown()
 
-		log.Printf("Shutdown complete")
+		logrus.Printf("Shutdown complete")
 
 		os.Exit(0)
 	}()
@@ -53,7 +53,7 @@ func (c *Container) Set(name string, item interface{}, fn func()) *Container {
 		})
 	}
 
-	log.Printf("Initialised %s", name)
+	logrus.Printf("Initialised %s", name)
 
 	return c
 }
@@ -69,11 +69,11 @@ func (c *Container) Get(name string) interface{} {
 func (c *Container) shutdown() {
 	c.once.Do(func() {
 		for i := len(c.shutdownFn) - 1; i >= 0; i-- {
-			log.Printf("Shutting down %s...", c.shutdownFn[i].name)
+			logrus.Printf("Shutting down %s...", c.shutdownFn[i].name)
 
 			c.shutdownFn[i].fn()
 
-			log.Printf("Shutting down %s complete", c.shutdownFn[i].name)
+			logrus.Printf("Shutting down %s complete", c.shutdownFn[i].name)
 		}
 
 		c.shutdownFn = c.shutdownFn[0:0]

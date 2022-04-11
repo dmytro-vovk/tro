@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/sirupsen/logrus"
 	"net/http"
 
 	"github.com/dmytro-vovk/tro/internal/api/model"
@@ -11,10 +12,14 @@ import (
 // todo: make private
 type Handler struct {
 	auth service.Authorization
+	log  *logrus.Logger
 }
 
-func NewHandler(serv service.Authorization) *Handler {
-	return &Handler{auth: serv}
+func NewHandler(log *logrus.Logger, serv service.Authorization) *Handler {
+	return &Handler{
+		auth: serv,
+		log:  log,
+	}
 }
 
 const errInvalidRequestBody = authErr("invalid request body")

@@ -6,8 +6,8 @@
     }
   },
   "api": {
-    "listen": ":8080",
-    "auth_method": "jwt"
+    "auth_method": "jwt",
+    "listen": ":8080"
   },
   "database": {
     "driver_name": "mysql"

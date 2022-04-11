@@ -2,24 +2,23 @@ package api
 
 import (
 	"errors"
-	"net/http"
-	"sync"
-
 	"github.com/dmytro-vovk/tro/internal/api/handler/middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
+	"math/rand"
+	"net/http"
+	"sync"
 )
 
 var router = struct {
-	once sync.Once
 	*gin.Engine
+	once sync.Once
 }{
 	Engine: gin.New(),
 }
 
 func (h *Handler) Router() http.Handler {
 	router.once.Do(func() {
-		router.Use(middleware.ErrorHandler(logrus.New()))
+		router.Use(middleware.Logger(h.log))
 
 		auth := router.Group("/auth")
 		{
@@ -31,29 +30,33 @@ func (h *Handler) Router() http.Handler {
 		api := router.Group("/api")
 		{
 			api.GET("/hello-world", h.helloWorld)
-			api.POST("/hello-world", h.helloWorld)
 		}
 	})
 
 	return router.Engine
 }
 
+var counter = 0
+
 func (h *Handler) helloWorld(c *gin.Context) {
-	if c.Request.Method == http.MethodPost {
-		var input struct {
-			Hello string `json:"hello" binding:"required"`
-			World string `json:"world"`
-		}
-		if err := c.BindJSON(&input); err != nil {
-			c.Error(errors.New("non-fatal error"))
-			c.AbortWithError(http.StatusBadRequest, errors.New("fatal error"))
-			return
-		}
+	buf := make([]byte, 0, 64)
+	for i := 0; i < cap(buf); i++ {
+		buf = append(buf, byte(65+rand.Intn(26)))
 	}
 
+	h.log.Debug("Debug message")
+	h.log.Info("Info message")
+	if counter > 1 {
+		c.Error(errors.New("first error")).SetMeta(gin.H{"context": "first"})
+		c.AbortWithError(http.StatusInternalServerError, errors.New("second error")).SetMeta(gin.H{"context": "second"})
+		counter++
+		return
+	}
+
+	counter++
 	c.JSON(http.StatusOK, struct {
 		Message string `json:"message"`
 	}{
-		Message: "Hello World",
+		Message: string(buf),
 	})
 }

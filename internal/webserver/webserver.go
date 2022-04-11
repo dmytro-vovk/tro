@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/sirupsen/logrus"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -18,7 +20,7 @@ type Webserver struct {
 	server *http.Server
 }
 
-func New(handler http.Handler, listen string, tls *tls.Config) *Webserver {
+func New(listen string, handler http.Handler, tls *tls.Config, writer io.Writer) *Webserver {
 	return &Webserver{
 		listen: listen,
 		server: &http.Server{
@@ -27,13 +29,14 @@ func New(handler http.Handler, listen string, tls *tls.Config) *Webserver {
 			IdleTimeout:  30 * time.Second,
 			Addr:         listen,
 			Handler:      handler,
+			ErrorLog:     log.New(writer, "", 0),
 			TLSConfig:    tls,
 		},
 	}
 }
 
 func (w *Webserver) Serve(name string) (err error) {
-	log.Printf("%s starting at %s", name, w.listen)
+	logrus.Printf("%s starting at %s", name, w.listen)
 
 	started := make(chan struct{})
 
