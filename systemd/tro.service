@@ -1,0 +1,13 @@
+# /etc/systemd/system/tro.service
+[Unit]
+Description=TRO Application
+
+[Service]
+User=tro17
+WorkingDirectory=/opt/tro
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ExecStart=/opt/tro/app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

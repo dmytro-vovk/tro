@@ -8,6 +8,8 @@ import (
 	"github.com/sirupsen/logrus/hooks/writer"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
+	"crypto/tls"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -25,6 +27,7 @@ import (
 	"github.com/dmytro-vovk/tro/internal/webserver/router"
 	"github.com/dmytro-vovk/tro/pkg/database"
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 var boot *Boot
@@ -92,9 +95,9 @@ func (c *Boot) API(log *logrus.Logger) *api.Handler {
 	return handler
 }
 
-func (c *Boot) WebRouter() http.HandlerFunc {
+func (c *Boot) WebRouter() http.Handler {
 	const id = "Web Router"
-	if s, ok := c.Get(id).(http.HandlerFunc); ok {
+	if s, ok := c.Get(id).(http.Handler); ok {
 		return s
 	}
 
@@ -114,18 +117,68 @@ func (c *Boot) WebRouter() http.HandlerFunc {
 	return r
 }
 
+func (c *Boot) TLSManager() *autocert.Manager {
+	const id = "TLS Manager"
+	if s, ok := c.Get(id).(*autocert.Manager); ok {
+		return s
+	}
+
+	tlsConfig := c.Config().WebServer.TLS
+
+	s := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache(tlsConfig.CertDir),
+		Email:      "dmytro.vovk@pm.me",
+		HostPolicy: autocert.HostWhitelist("tro.pw"),
+	}
+
+	c.Set(id, s, nil)
+
+	return s
+}
+
+func (c *Boot) TLSConfig() *tls.Config {
+	const id = "TLS Config"
+	if s, ok := c.Get(id).(*tls.Config); ok {
+		return s
+	}
+
+	tlsConfig := c.Config().WebServer.TLS
+
+	if !tlsConfig.Enabled {
+		return nil
+	}
+
+	s := c.TLSManager().TLSConfig()
+
+	c.Set(id, s, nil)
+
+	return s
+}
+
 func (c *Boot) Webserver() *webserver.Webserver {
 	const id = "Web Server"
 	if s, ok := c.Get(id).(*webserver.Webserver); ok {
 		return s
 	}
 
-	l := c.Logger()
-	w := l.WriterLevel(logrus.ErrorLevel)
+	//l := c.Logger()
+	//w := l.WriterLevel(logrus.ErrorLevel)
+	//s := webserver.New(
+	//	c.Config().WebServer.Listen,
+	//	c.WebRouter(),
+	//	w,
+	
+	handler := c.WebRouter()
+
+	if c.Config().WebServer.TLS.Enabled {
+		handler = c.TLSManager().HTTPHandler(handler)
+	}
+
 	s := webserver.New(
+		handler,
 		c.Config().WebServer.Listen,
-		c.WebRouter(),
-		w,
+		c.TLSConfig(),
 	)
 
 	c.Set(id, s, func() {
@@ -166,8 +219,9 @@ func (c *Boot) APIServer() *webserver.Webserver {
 	w := l.WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
 		c.Config().API.Listen,
-		c.APIRouter(l),
-		w,
+// 		c.APIRouter(l),
+// 		w,
+		nil,
 	)
 
 	c.Set(id, s, func() {

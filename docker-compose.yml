@@ -2,7 +2,7 @@ version: "3.1"
 
 services:
   db:
-    image: percona
+    image: percona:8.0.27-18
     restart: always
     ports:
       - "3306:3306"
@@ -10,6 +10,6 @@ services:
       - "./db:/var/lib/mysql"
     environment:
       MYSQL_ROOT_PASSWORD: PLnfAVtoqyRhixBtqwvkUB9f
-      MYSQL_USER: tro-user
+      MYSQL_USER: tro7592
       MYSQL_PASSWORD: qwvkUB9f7AVtPLnf
       MYSQL_DATABASE: tro

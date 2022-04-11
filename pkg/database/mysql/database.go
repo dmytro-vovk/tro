@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"fmt"
+	"log"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -28,8 +30,15 @@ func New(config Config) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("error conecting to database: %s", err)
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("error pinging database: %s", err)
+	for {
+		if err := db.Ping(); err != nil {
+			log.Printf("Error pinging database: %s [%T]", err, err)
+			time.Sleep(time.Second)
+
+			continue
+		}
+
+		break
 	}
 
 	return db, nil

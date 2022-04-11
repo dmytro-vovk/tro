@@ -12,6 +12,11 @@ import (
 type Config struct {
 	WebServer struct {
 		Listen string `json:"listen"`
+		TLS    struct {
+			Enabled  bool   `json:"enabled"`
+			HostName string `json:"host_name"`
+			CertDir  string `json:"cert_dir"`
+		} `json:"tls"`
 	} `json:"webserver"`
 	API struct {
 		AuthMethod string `json:"auth_method"`

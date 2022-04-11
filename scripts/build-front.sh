@@ -4,14 +4,14 @@ set -eu
 
 docker run \
   --rm \
-  --volume $(PWD):/src \
+  --volume "$(PWD)":/src \
   --workdir /src \
   node:alpine3.14 \
   npm install
 
 docker run \
   --rm \
-  --volume $(PWD):/src \
+  --volume "$(PWD)":/src \
   --workdir /src \
   node:alpine3.14 \
   npm run build

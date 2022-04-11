@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	runtime "github.com/banzaicloud/logrus-runtime-formatter"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

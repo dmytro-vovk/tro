@@ -1,3 +1,6 @@
+# CREATE USER 'tro7592'@'localhost' IDENTIFIED BY 'qwvkUB9f7AVtPLnf';
+# GRANT INSERT, UPDATE, DELETE, SELECT, REFERENCES on tro.* TO 'tro7592'@'localhost';
+
 CREATE DATABASE IF NOT EXISTS tro;
 
 USE tro;
@@ -7,4 +10,3 @@ CREATE TABLE IF NOT EXISTS operators (
     login VARCHAR(20) NOT NULL,
     CONSTRAINT operators_login_uindex UNIQUE (login)
 );
-

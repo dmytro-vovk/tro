@@ -7,6 +7,7 @@ import (
 type Application struct {
 	responseCounter int
 	streamer        Streamer
+	db              *sqlx.DB
 }
 
 type Streamer interface {
@@ -14,7 +15,9 @@ type Streamer interface {
 }
 
 func New(db *sqlx.DB) *Application {
-	return &Application{}
+	return &Application{
+		db: db,
+	}
 }
 
 func (a *Application) SetStreamer(s Streamer) {
