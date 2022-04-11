@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/dmytro-vovk/tro/internal/api"
@@ -319,94 +318,90 @@ func (c *Boot) APIService() service.Service {
 	return s
 }
 
-var logger struct {
-	*logrus.Logger
-	once sync.Once
-}
-
 func (c *Boot) Logger() *logrus.Logger {
-	logger.once.Do(func() {
-		const id = "Logger"
+	const id = "Logger"
+	if logger, ok := c.Get(id).(*logrus.Logger); ok {
+		return logger
+	}
 
-		var (
-			path            = "/var/log/tro/tro.log"
-			timestampFormat = "2006-01-02 15:04:05"
-			fieldMap        = logrus.FieldMap{
-				logrus.FieldKeyMsg: "message",
-			}
-		)
+	var (
+		path            = "/var/log/tro/tro.log"
+		timestampFormat = "2006-01-02 15:04:05"
+		fieldMap        = logrus.FieldMap{
+			logrus.FieldKeyMsg: "message",
+		}
+	)
 
-		logger.Logger = &logrus.Logger{
-			Out: io.Discard,
-			Formatter: &runtime.Formatter{
-				ChildFormatter: &logrus.TextFormatter{
-					ForceColors:     true,
-					FullTimestamp:   true,
-					TimestampFormat: timestampFormat,
-					FieldMap:        fieldMap,
-				},
-				Line:         true,
-				Package:      true,
-				File:         true,
-				BaseNameOnly: true,
+	logger := &logrus.Logger{
+		Out: io.Discard,
+		Formatter: &runtime.Formatter{
+			ChildFormatter: &logrus.TextFormatter{
+				ForceColors:     true,
+				FullTimestamp:   true,
+				TimestampFormat: timestampFormat,
+				FieldMap:        fieldMap,
 			},
-			Hooks:    logrus.LevelHooks{},
-			Level:    logrus.DebugLevel,
-			ExitFunc: os.Exit,
+			Line:         true,
+			Package:      true,
+			File:         true,
+			BaseNameOnly: true,
+		},
+		Hooks:    logrus.LevelHooks{},
+		Level:    logrus.DebugLevel,
+		ExitFunc: os.Exit,
+	}
+
+	rotor := &lumberjack.Logger{
+		Filename:   path,
+		MaxSize:    1,
+		MaxAge:     1,
+		MaxBackups: 3,
+		Compress:   true,
+	}
+
+	for _, hook := range []logrus.Hook{
+		// Send logs with level higher than warning to stderr
+		&writer.Hook{
+			Writer: os.Stderr,
+			LogLevels: []logrus.Level{
+				logrus.PanicLevel,
+				logrus.FatalLevel,
+				logrus.ErrorLevel,
+				logrus.WarnLevel,
+			},
+		},
+		// Send info and debug logs to stdout
+		&writer.Hook{
+			Writer: os.Stdout,
+			LogLevels: []logrus.Level{
+				logrus.InfoLevel,
+				logrus.DebugLevel,
+			},
+		},
+		// Send all logs to file in JSON format with rotation
+		lfshook.NewHook(rotor, &runtime.Formatter{
+			ChildFormatter: &logrus.JSONFormatter{
+				TimestampFormat: timestampFormat,
+				FieldMap:        fieldMap,
+			},
+			Line:         true,
+			Package:      true,
+			File:         true,
+			BaseNameOnly: true,
+		}),
+	} {
+		logger.AddHook(hook)
+	}
+
+	c.Set(id, rotor, func() {
+		if err := rotor.Rotate(); err != nil {
+			logrus.Println("Error rotating log files:", err)
 		}
 
-		rotor := &lumberjack.Logger{
-			Filename:   path,
-			MaxSize:    1,
-			MaxAge:     1,
-			MaxBackups: 3,
-			Compress:   true,
+		if err := rotor.Close(); err != nil {
+			logrus.Println("Error closing log files rotator:", err)
 		}
-
-		for _, hook := range []logrus.Hook{
-			// Send logs with level higher than warning to stderr
-			&writer.Hook{
-				Writer: os.Stderr,
-				LogLevels: []logrus.Level{
-					logrus.PanicLevel,
-					logrus.FatalLevel,
-					logrus.ErrorLevel,
-					logrus.WarnLevel,
-				},
-			},
-			// Send info and debug logs to stdout
-			&writer.Hook{
-				Writer: os.Stdout,
-				LogLevels: []logrus.Level{
-					logrus.InfoLevel,
-					logrus.DebugLevel,
-				},
-			},
-			// Send all logs to file in JSON format with rotation
-			lfshook.NewHook(rotor, &runtime.Formatter{
-				ChildFormatter: &logrus.JSONFormatter{
-					TimestampFormat: timestampFormat,
-					FieldMap:        fieldMap,
-				},
-				Line:         true,
-				Package:      true,
-				File:         true,
-				BaseNameOnly: true,
-			}),
-		} {
-			logger.AddHook(hook)
-		}
-
-		c.Set(id, rotor, func() {
-			if err := rotor.Rotate(); err != nil {
-				logrus.Println("Error rotating log files:", err)
-			}
-
-			if err := rotor.Close(); err != nil {
-				logrus.Println("Error closing log files rotator:", err)
-			}
-		})
 	})
 
-	return logger.Logger
+	return logger
 }
