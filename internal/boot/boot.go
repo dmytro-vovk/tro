@@ -2,14 +2,13 @@ package boot
 
 import (
 	"context"
+	"crypto/tls"
 	runtime "github.com/banzaicloud/logrus-runtime-formatter"
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
-	"crypto/tls"
-	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -162,23 +161,17 @@ func (c *Boot) Webserver() *webserver.Webserver {
 		return s
 	}
 
-	//l := c.Logger()
-	//w := l.WriterLevel(logrus.ErrorLevel)
-	//s := webserver.New(
-	//	c.Config().WebServer.Listen,
-	//	c.WebRouter(),
-	//	w,
-	
 	handler := c.WebRouter()
-
 	if c.Config().WebServer.TLS.Enabled {
 		handler = c.TLSManager().HTTPHandler(handler)
 	}
 
+	w := c.Logger().WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
-		handler,
 		c.Config().WebServer.Listen,
+		handler,
 		c.TLSConfig(),
+		w,
 	)
 
 	c.Set(id, s, func() {
@@ -219,9 +212,9 @@ func (c *Boot) APIServer() *webserver.Webserver {
 	w := l.WriterLevel(logrus.ErrorLevel)
 	s := webserver.New(
 		c.Config().API.Listen,
-// 		c.APIRouter(l),
-// 		w,
+		c.APIRouter(l),
 		nil,
+		w,
 	)
 
 	c.Set(id, s, func() {

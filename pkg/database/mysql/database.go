@@ -2,7 +2,7 @@ package mysql
 
 import (
 	"fmt"
-	"log"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -32,7 +32,7 @@ func New(config Config) (*sqlx.DB, error) {
 
 	for {
 		if err := db.Ping(); err != nil {
-			log.Printf("Error pinging database: %s [%T]", err, err)
+			logrus.Printf("Error pinging database: [%T] %s", err, err)
 			time.Sleep(time.Second)
 
 			continue
