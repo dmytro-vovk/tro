@@ -43,7 +43,6 @@ func New() *Boot {
 	c, fn := NewContainer()
 	boot = &Boot{Container: c, Shutdown: fn}
 
-	*logrus.StandardLogger() = *boot.Logger()
 	logrus.RegisterExitHandler(fn)
 
 	return boot
@@ -332,25 +331,22 @@ func (c *Boot) Logger() *logrus.Logger {
 		}
 	)
 
-	logger := &logrus.Logger{
-		Out: io.Discard,
-		Formatter: &runtime.Formatter{
-			ChildFormatter: &logrus.TextFormatter{
-				ForceColors:     true,
-				FullTimestamp:   true,
-				TimestampFormat: timestampFormat,
-				FieldMap:        fieldMap,
-			},
-			Line:         true,
-			Package:      true,
-			File:         true,
-			BaseNameOnly: true,
+	logrus.SetOutput(io.Discard)
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&runtime.Formatter{
+		ChildFormatter: &logrus.TextFormatter{
+			ForceColors:     true,
+			FullTimestamp:   true,
+			TimestampFormat: timestampFormat,
+			FieldMap:        fieldMap,
 		},
-		Hooks:    logrus.LevelHooks{},
-		Level:    logrus.DebugLevel,
-		ExitFunc: os.Exit,
-	}
+		Line:         true,
+		Package:      true,
+		File:         true,
+		BaseNameOnly: true,
+	})
 
+	// Configure logs rotation
 	rotor := &lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    1,
@@ -390,7 +386,7 @@ func (c *Boot) Logger() *logrus.Logger {
 			BaseNameOnly: true,
 		}),
 	} {
-		logger.AddHook(hook)
+		logrus.AddHook(hook)
 	}
 
 	c.Set(id, rotor, func() {
@@ -403,5 +399,5 @@ func (c *Boot) Logger() *logrus.Logger {
 		}
 	})
 
-	return logger
+	return logrus.StandardLogger()
 }
