@@ -1,4 +1,8 @@
 {
+  "logs": {
+    "path": "/var/log/tro/app.log",
+    "level": "debug"
+  },
   "webserver": {
     "listen": ":80",
     "tls": {

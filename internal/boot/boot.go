@@ -323,22 +323,16 @@ func (c *Boot) Logger() *logrus.Logger {
 		return logger
 	}
 
-	var (
-		path            = "/var/log/tro/tro.log"
-		timestampFormat = "2006-01-02 15:04:05"
-		fieldMap        = logrus.FieldMap{
-			logrus.FieldKeyMsg: "message",
-		}
-	)
+	cfg := c.Config().Logger()
 
+	logrus.SetLevel(cfg.Level)
 	logrus.SetOutput(io.Discard)
-	logrus.SetLevel(logrus.DebugLevel)
 	logrus.SetFormatter(&runtime.Formatter{
 		ChildFormatter: &logrus.TextFormatter{
 			ForceColors:     true,
 			FullTimestamp:   true,
-			TimestampFormat: timestampFormat,
-			FieldMap:        fieldMap,
+			TimestampFormat: cfg.TimestampFormat,
+			FieldMap:        cfg.FieldMap,
 		},
 		Line:         true,
 		Package:      true,
@@ -348,7 +342,7 @@ func (c *Boot) Logger() *logrus.Logger {
 
 	// Configure logs rotation
 	rotor := &lumberjack.Logger{
-		Filename:   path,
+		Filename:   cfg.Path,
 		MaxSize:    1,
 		MaxAge:     1,
 		MaxBackups: 3,
@@ -377,8 +371,8 @@ func (c *Boot) Logger() *logrus.Logger {
 		// Send all logs to file in JSON format with rotation
 		lfshook.NewHook(rotor, &runtime.Formatter{
 			ChildFormatter: &logrus.JSONFormatter{
-				TimestampFormat: timestampFormat,
-				FieldMap:        fieldMap,
+				TimestampFormat: cfg.TimestampFormat,
+				FieldMap:        cfg.FieldMap,
 			},
 			Line:         true,
 			Package:      true,
@@ -398,6 +392,11 @@ func (c *Boot) Logger() *logrus.Logger {
 			logrus.Println("Error closing log files rotator:", err)
 		}
 	})
+
+	logrus.WithFields(logrus.Fields{
+		"output": rotor.Filename,
+		"grade":  logrus.GetLevel(),
+	}).Info("Logger was successfully configured")
 
 	return logrus.StandardLogger()
 }

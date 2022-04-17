@@ -10,6 +10,10 @@ import (
 )
 
 type Config struct {
+	Logs struct {
+		Path  string `json:"path"`
+		Level string `json:"level"`
+	} `json:"logs"`
 	WebServer struct {
 		Listen string `json:"listen"`
 		TLS    struct {
@@ -50,4 +54,32 @@ func Load(fileName string) *Config {
 	}
 
 	return &cfg
+}
+
+type Logger struct {
+	Path            string
+	Level           logrus.Level
+	TimestampFormat string
+	FieldMap        logrus.FieldMap
+}
+
+func (c *Config) Logger() *Logger {
+	config := &Logger{
+		Path:            "logs/app.log",
+		Level:           logrus.InfoLevel,
+		TimestampFormat: "2006-01-02 15:04:05",
+		FieldMap: logrus.FieldMap{
+			logrus.FieldKeyMsg: "message",
+		},
+	}
+
+	if path := c.Logs.Path; path != "" {
+		config.Path = path
+	}
+
+	if level, err := logrus.ParseLevel(c.Logs.Level); err == nil {
+		config.Level = level
+	}
+
+	return config
 }
