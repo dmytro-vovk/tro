@@ -6,16 +6,28 @@ import (
 )
 
 func main() {
-	c := boot.New()
-	defer c.Shutdown()
+	c, err := boot.New()
+	if err != nil {
+		logrus.Fatal(err)
+	}
 
 	go func() {
-		if err := c.APIServer().Serve("API server"); err != nil {
+		s, err := c.APIServer()
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		if err := s.Serve("API server"); err != nil {
 			logrus.Fatal(err)
 		}
 	}()
 
-	if err := c.Webserver().Serve("Web server"); err != nil {
+	s, err := c.Webserver()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	if err := s.Serve("Web server"); err != nil {
 		logrus.Fatal(err)
 	}
 }

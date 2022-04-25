@@ -2,8 +2,8 @@ package boot
 
 import (
 	"context"
-	"crypto/tls"
-	runtime "github.com/banzaicloud/logrus-runtime-formatter"
+	"fmt"
+	"github.com/dmytro-vovk/tro/internal/boot/config"
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/writer"
@@ -11,95 +11,125 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/dmytro-vovk/tro/internal/api"
 	"github.com/dmytro-vovk/tro/internal/api/repository"
 	"github.com/dmytro-vovk/tro/internal/api/service"
 	"github.com/dmytro-vovk/tro/internal/app"
-	"github.com/dmytro-vovk/tro/internal/boot/config"
 	"github.com/dmytro-vovk/tro/internal/webserver"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/home"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws"
 	"github.com/dmytro-vovk/tro/internal/webserver/handlers/ws/client"
 	"github.com/dmytro-vovk/tro/internal/webserver/router"
-	"github.com/dmytro-vovk/tro/pkg/database"
-	"github.com/jmoiron/sqlx"
-	"golang.org/x/crypto/acme/autocert"
+	"github.com/spf13/viper"
 )
 
-var boot *Boot
-
-type Boot struct {
-	*Container
-	Shutdown func()
+type boot struct {
+	container
+	viper  *viper.Viper
+	logger *logrus.Logger
 }
 
-func New() *Boot {
-	if boot != nil {
-		return boot
+func New() (*boot, error) {
+	b := &boot{viper: config.DefaultViper()}
+
+	if err := b.loadEnv(); err != nil {
+		return nil, err
 	}
 
-	c, fn := NewContainer()
-	boot = &Boot{Container: c, Shutdown: fn}
+	if err := b.loadConfig(); err != nil {
+		return nil, err
+	}
 
-	logrus.RegisterExitHandler(fn)
+	if err := b.configureLogger(); err != nil {
+		return nil, err
+	}
 
-	return boot
+	go b.shutdown()
+
+	return b, nil
 }
 
-func (c *Boot) Config() *config.Config {
-	const id = "Config"
-	if s, ok := c.Get(id).(*config.Config); ok {
-		return s
-	}
+func (b *boot) shutdown() {
+	logrus.RegisterExitHandler(b.shutdown)
 
-	configFile := "config.json"
-	if cfg := os.Getenv("CONFIG"); cfg != "" {
-		configFile = cfg
-	}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	s := <-quit
 
-	s := config.Load(configFile)
-
-	c.Set(id, s, nil)
-
-	return s
+	logrus.Infof("Got %v, shutting down...", s)
+	b.container.shutdown()
+	os.Exit(0)
 }
 
-func (c *Boot) Application() *app.Application {
+func (b *boot) loadEnv() error {
+	v := viper.New()
+	v.AddConfigPath(".")
+	v.SetConfigName(".env")
+	v.SetConfigType("env")
+
+	if err := v.ReadInConfig(); err != nil {
+		return fmt.Errorf("error loading env variables: %w", err)
+	}
+
+	for key := range v.AllSettings() {
+		if err := b.viper.BindEnv(key); err != nil {
+			return fmt.Errorf("error binding env variable %q: %w", key, err)
+		}
+	}
+
+	if err := b.viper.MergeConfigMap(v.AllSettings()); err != nil {
+		return fmt.Errorf("error merging with env config: %w", err)
+	}
+
+	return nil
+}
+
+func (b *boot) loadConfig() error {
+	v := viper.New()
+	v.AddConfigPath("configs")
+
+	in := "dev-config"
+	if s := b.viper.GetString("config"); s != "" {
+		in = s
+	}
+	v.SetConfigName(in)
+
+	if err := v.ReadInConfig(); err != nil {
+		return fmt.Errorf("error loading %q config: %w", in, err)
+	}
+
+	if err := b.viper.MergeConfigMap(v.AllSettings()); err != nil {
+		return fmt.Errorf("error merging with %q config: %w", in, err)
+	}
+
+	return nil
+}
+
+func (b *boot) Application() *app.Application {
 	const id = "Application"
-	if s, ok := c.Get(id).(*app.Application); ok {
+	if s, ok := b.Get(id).(*app.Application); ok {
 		return s
 	}
 
-	a := app.New(c.Storage())
+	a := app.New(nil)
 
-	c.Set(id, a, nil)
+	b.Set(id, a, nil)
 
 	return a
 }
 
-func (c *Boot) API(log *logrus.Logger) *api.Handler {
-	const id = "API"
-	if s, ok := c.Get(id).(*api.Handler); ok {
-		return s
-	}
-
-	handler := api.NewHandler(log, c.APIService())
-
-	c.Set(id, handler, nil)
-
-	return handler
-}
-
-func (c *Boot) WebRouter() http.Handler {
+func (b *boot) WebRouter() http.Handler {
 	const id = "Web Router"
-	if s, ok := c.Get(id).(http.Handler); ok {
+	if s, ok := b.Get(id).(http.Handler); ok {
 		return s
 	}
 
 	r := router.New(
-		router.Route("/ws", c.WebsocketHandler().Handler),
+		router.Route("/ws", b.WebsocketHandler().Handler),
 		router.Route("/js/index.js", home.Scripts),
 		router.Route("/js/index.js.map", home.ScriptsMap),
 		router.Route("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
@@ -109,244 +139,133 @@ func (c *Boot) WebRouter() http.Handler {
 		router.CatchAll(home.Handler),
 	)
 
-	c.Set(id, r, nil)
+	b.Set(id, r, nil)
 
 	return r
 }
 
-func (c *Boot) TLSManager() *autocert.Manager {
-	const id = "TLS Manager"
-	if s, ok := c.Get(id).(*autocert.Manager); ok {
-		return s
-	}
-
-	tlsConfig := c.Config().WebServer.TLS
-
-	s := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache(tlsConfig.CertDir),
-		Email:      "dmytro.vovk@pm.me",
-		HostPolicy: autocert.HostWhitelist("tro.pw"),
-	}
-
-	c.Set(id, s, nil)
-
-	return s
-}
-
-func (c *Boot) TLSConfig() *tls.Config {
-	const id = "TLS Config"
-	if s, ok := c.Get(id).(*tls.Config); ok {
-		return s
-	}
-
-	tlsConfig := c.Config().WebServer.TLS
-
-	if !tlsConfig.Enabled {
-		return nil
-	}
-
-	s := c.TLSManager().TLSConfig()
-
-	c.Set(id, s, nil)
-
-	return s
-}
-
-func (c *Boot) Webserver() *webserver.Webserver {
+func (b *boot) Webserver() (*webserver.Webserver, error) {
 	const id = "Web Server"
-	if s, ok := c.Get(id).(*webserver.Webserver); ok {
-		return s
+	if s, ok := b.Get(id).(*webserver.Webserver); ok {
+		return s, nil
 	}
 
-	handler := c.WebRouter()
-	if c.Config().WebServer.TLS.Enabled {
-		handler = c.TLSManager().HTTPHandler(handler)
-	}
+	handler := b.WebRouter()
+	server := webserver.New(b.viper.GetString("webserver.listen"), handler, b.logger, webserver.WithTLS(handler, b.viper))
 
-	w := c.Logger().WriterLevel(logrus.ErrorLevel)
-	s := webserver.New(
-		c.Config().WebServer.Listen,
-		handler,
-		c.TLSConfig(),
-		w,
-	)
-
-	c.Set(id, s, func() {
+	b.Set(id, server, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := s.Stop(ctx); err != nil {
+		if err := server.Stop(ctx); err != nil {
 			logrus.Println("Error stopping web server:", err)
 		}
-
-		if err := w.Close(); err != nil {
-			logrus.Println("Error closing web server error logger:", err)
-		}
 	})
 
-	return s
+	return server, nil
 }
 
-func (c *Boot) APIRouter(log *logrus.Logger) http.Handler {
-	const id = "API Router"
-	if s, ok := c.Get(id).(http.Handler); ok {
-		return s
-	}
-
-	r := c.API(log).Router()
-	c.Set(id, r, nil)
-
-	return r
-}
-
-func (c *Boot) APIServer() *webserver.Webserver {
+func (b *boot) APIServer() (*webserver.Webserver, error) {
 	const id = "API Server"
-	if s, ok := c.Get(id).(*webserver.Webserver); ok {
-		return s
+	if server, ok := b.Get(id).(*webserver.Webserver); ok {
+		return server, nil
 	}
 
-	l := c.Logger()
-	w := l.WriterLevel(logrus.ErrorLevel)
-	s := webserver.New(
-		c.Config().API.Listen,
-		c.APIRouter(l),
-		nil,
-		w,
-	)
+	repo, err := repository.New(b.viper.Sub("database"))
+	if err != nil {
+		return nil, fmt.Errorf("can't create API repository: %w", err)
+	}
 
-	c.Set(id, s, func() {
+	srv, err := service.New(repo, b.viper.Sub("api"))
+	if err != nil {
+		return nil, fmt.Errorf("can't create API service: %w", err)
+	}
+
+	server := webserver.New(b.viper.GetString("api.listen"), api.NewHandler(b.logger, srv).Router(), b.logger)
+
+	b.Set(id, server, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := s.Stop(ctx); err != nil {
-			logrus.Println("Error stopping API server:", err)
+		if err := repo.Close(); err != nil {
+			b.logger.Errorf("error closing %s database: %s", repo.DriverName(), err)
 		}
 
-		if err := w.Close(); err != nil {
-			logrus.Println("Error closing API server error logger:", err)
+		if err := server.Stop(ctx); err != nil {
+			b.logger.Errorln("error stopping API server:", err)
 		}
 	})
 
-	return s
+	return server, nil
 }
 
-func (c *Boot) WebsocketHandler() *ws.Handler {
+func (b *boot) WebsocketHandler() *ws.Handler {
 	const id = "WS Handler"
-	if s, ok := c.Get(id).(*ws.Handler); ok {
+	if s, ok := b.Get(id).(*ws.Handler); ok {
 		return s
 	}
 
-	h := ws.NewHandler(c.WSClient())
+	h := ws.NewHandler(b.WSClient())
 
-	c.Set(id, h, nil)
+	b.Set(id, h, nil)
 
 	return h
 }
 
-func (c *Boot) WSClient() *client.Client {
+func (b *boot) WSClient() *client.Client {
 	const id = "WS Client"
-	if s, ok := c.Get(id).(*client.Client); ok {
+	if s, ok := b.Get(id).(*client.Client); ok {
 		return s
 	}
 
 	s := client.New().
 		NS("example",
-			client.NSMethod("method", c.Application().Example),
+			client.NSMethod("method", b.Application().Example),
 		).
 		NS("code",
-			client.NSMethod("generate_image", c.Application().QR),
+			client.NSMethod("generate_image", b.Application().QR),
 		)
 
-	c.Application().SetStreamer(s)
+	b.Application().SetStreamer(s)
 
-	c.Set(id, s, nil)
-
-	return s
-}
-
-func (c *Boot) Storage() *sqlx.DB {
-	const id = "Database"
-	if s, ok := c.Get(id).(*sqlx.DB); ok {
-		return s
-	}
-
-	db, err := database.New(c.Config().Database.DriverName)
-	if err != nil {
-		logrus.Fatalf("Error connecting to database: %s", err)
-	}
-
-	c.Set(id, db, func() {
-		if err := db.Close(); err != nil {
-			logrus.Printf("Error closing database: %s", err)
-		}
-	})
-
-	return db
-}
-
-func (c *Boot) Repository() repository.Repository {
-	const id = "Repository"
-	if s, ok := c.Get(id).(repository.Repository); ok {
-		return s
-	}
-
-	repo, err := repository.New(c.Storage())
-	if err != nil {
-		logrus.Fatalf("Error creating repository: %s", err)
-	}
-
-	c.Set(id, repo, nil)
-
-	return repo
-}
-
-func (c *Boot) APIService() service.Service {
-	const id = "API Service"
-	if s, ok := c.Get(id).(service.Service); ok {
-		return s
-	}
-
-	s, err := service.New(c.Repository(), c.Config().API.AuthMethod)
-	if err != nil {
-		logrus.Fatalf("Error creating API service: %s", err)
-	}
-
-	c.Set(id, s, nil)
+	b.Set(id, s, nil)
 
 	return s
 }
 
-func (c *Boot) Logger() *logrus.Logger {
-	const id = "Logger"
-	if logger, ok := c.Get(id).(*logrus.Logger); ok {
-		return logger
+func (b *boot) configureLogger() error {
+	var cfg config.Logger
+	if err := b.viper.UnmarshalKey("logger", &cfg); err != nil {
+		return fmt.Errorf("unable to unmarshall logger config: %w", err)
 	}
 
-	cfg := c.Config().Logger()
+	level, err := logrus.ParseLevel(cfg.Level)
+	if err != nil {
+		return fmt.Errorf("can't parse logger level: %w", err)
+	}
 
-	logrus.SetLevel(cfg.Level)
-	logrus.SetOutput(io.Discard)
-	logrus.SetFormatter(&runtime.Formatter{
-		ChildFormatter: &logrus.TextFormatter{
+	logger := &logrus.Logger{
+		Level: level,
+		Out:   io.Discard,
+		Formatter: cfg.Formatter(&logrus.TextFormatter{
 			ForceColors:     true,
+			DisableQuote:    true,
 			FullTimestamp:   true,
 			TimestampFormat: cfg.TimestampFormat,
-			FieldMap:        cfg.FieldMap,
-		},
-		Line:         true,
-		Package:      true,
-		File:         true,
-		BaseNameOnly: true,
-	})
+			FieldMap:        cfg.FieldMap(),
+		}),
+		Hooks:    make(logrus.LevelHooks),
+		ExitFunc: os.Exit,
+	}
 
 	// Configure logs rotation
 	rotor := &lumberjack.Logger{
-		Filename:   cfg.Path,
-		MaxSize:    1,
-		MaxAge:     1,
-		MaxBackups: 3,
-		Compress:   true,
+		Filename:   cfg.Rotor.Filename,
+		MaxSize:    cfg.Rotor.MaxSize,
+		MaxAge:     cfg.Rotor.MaxAge,
+		MaxBackups: cfg.Rotor.MaxBackups,
+		LocalTime:  cfg.Rotor.LocalTime,
+		Compress:   cfg.Rotor.Compress,
 	}
 
 	for _, hook := range []logrus.Hook{
@@ -369,34 +288,29 @@ func (c *Boot) Logger() *logrus.Logger {
 			},
 		},
 		// Send all logs to file in JSON format with rotation
-		lfshook.NewHook(rotor, &runtime.Formatter{
-			ChildFormatter: &logrus.JSONFormatter{
-				TimestampFormat: cfg.TimestampFormat,
-				FieldMap:        cfg.FieldMap,
-			},
-			Line:         true,
-			Package:      true,
-			File:         true,
-			BaseNameOnly: true,
-		}),
+		lfshook.NewHook(rotor, cfg.Formatter(&logrus.JSONFormatter{
+			TimestampFormat: cfg.TimestampFormat,
+			FieldMap:        cfg.FieldMap(),
+		})),
 	} {
-		logrus.AddHook(hook)
+		logger.AddHook(hook)
 	}
 
-	c.Set(id, rotor, func() {
+	b.Set("logger", rotor, func() {
 		if err := rotor.Rotate(); err != nil {
-			logrus.Println("Error rotating log files:", err)
+			b.logger.Errorln("error rotating log files:", err)
 		}
 
 		if err := rotor.Close(); err != nil {
-			logrus.Println("Error closing log files rotator:", err)
+			b.logger.Errorln("error closing log files rotator:", err)
 		}
 	})
 
-	logrus.WithFields(logrus.Fields{
+	b.logger = logger
+	b.logger.WithFields(logrus.Fields{
 		"output": rotor.Filename,
-		"grade":  logrus.GetLevel(),
-	}).Info("Logger was successfully configured")
+		"grade":  b.logger.GetLevel(),
+	}).Info("logger was successfully configured")
 
-	return logrus.StandardLogger()
+	return nil
 }
