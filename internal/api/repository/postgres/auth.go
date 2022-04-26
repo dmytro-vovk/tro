@@ -9,13 +9,47 @@ import (
 
 const usersTable = "users"
 
+type Config struct {
+	Username string `mapstructure:"POSTGRESQL_USERNAME"`
+	Password string `mapstructure:"POSTGRESQL_PASSWORD"`
+	Host     string `mapstructure:"POSTGRESQL_HOST"`
+	Port     string `mapstructure:"POSTGRESQL_PORT"`
+	Database string `mapstructure:"POSTGRESQL_DATABASE"`
+	SSLMode  string `mapstructure:"POSTGRESQL_SSLMODE"`
+}
+
+func (c Config) DSN() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		c.Username,
+		c.Password,
+		c.Host,
+		c.Port,
+		c.Database,
+		c.SSLMode,
+	)
+}
+
 type storage struct {
 	db *sqlx.DB
 }
 
-func New(db *sqlx.DB) *storage {
-	return &storage{db: db}
+func New(c Config) (*storage, error) {
+	db, err := sqlx.Open("postgres", c.DSN())
+	if err != nil {
+		return nil, fmt.Errorf("error conecting to database: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("error pinging database: %w", err)
+	}
+
+	return &storage{db: db}, nil
 }
+
+func (s *storage) Close() error { return s.db.Close() }
+
+func (s *storage) DriverName() string { return s.db.DriverName() }
 
 func (s *storage) CreateUser(user model.User) (int, error) {
 	var id int
