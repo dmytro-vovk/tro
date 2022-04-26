@@ -171,7 +171,7 @@ func (b *boot) APIServer() (*webserver.Webserver, error) {
 		return server, nil
 	}
 
-	repo, err := repository.New(b.viper.Sub("database"))
+	repo, err := repository.New(b.viper)
 	if err != nil {
 		return nil, fmt.Errorf("can't create API repository: %w", err)
 	}

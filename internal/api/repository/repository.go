@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"errors"
 	"fmt"
 	"github.com/spf13/viper"
 
@@ -26,12 +25,8 @@ type Repository interface {
 }
 
 func New(v *viper.Viper) (Repository, error) {
-	if v == nil {
-		return nil, errors.New("database configuration not provided")
-	}
-
 	errFormat := "can't unmarshall %q config: %w"
-	switch driver := v.GetString("driver_name"); driver {
+	switch driver := v.GetString("database.driver_name"); driver {
 	case "mysql":
 		var config mysql.Config
 		if err := v.Unmarshal(&config); err != nil {
